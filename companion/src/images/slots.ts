@@ -67,6 +67,19 @@ export class SlotPool {
     this.load();
   }
 
+  /**
+   * Counts the slots again (the folder may have been installed while the companion ran: the user closes WoW,
+   * runs the installer, starts WoW). Returns true when the count changed.
+   */
+  rediscover(): boolean {
+    const n = this.discover();
+    if (n === this.total) return false;
+    log.info(`image slots: ${n} installed (was ${this.total})`);
+    this.total = n;
+    if (this.st.next > n + 1) this.st.next = n + 1;
+    return true;
+  }
+
   /** Number of consecutive valid slot files i0001.. in the slot folder. */
   discover(): number {
     if (!this.o.dir || !existsSync(this.o.dir)) return 0;

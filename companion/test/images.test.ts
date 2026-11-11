@@ -239,6 +239,21 @@ describe("image manager", () => {
     expect(m.images.resolve(refs[9])).toEqual({ s: 0, st: "full" });
     expect(m.images.slotsInfo()).toEqual({ left: 0, total: 9, reset: "restart" });
   });
+  it("slots installed while the companion runs are found (no restart of the bridge needed)", () => {
+    const t3 = new FakeT3Client(1794393000_000);
+    const d = join(tmp(), "T3Bridge_Img");
+    const pool = new SlotPool({ dir: d, stateFile: join(tmp(), "s.json"), resetOnReload: false });
+    let now = 1_000_000, dirty = 0;
+    const images = new ImageManager({ t3, tools: new FakeTools(), pool, tmpDir: join(tmp(), "tmp"), screenshotsDir: tmp(), onDirty: () => dirty++, now: () => now });
+    images.beginRender();
+    expect(images.slotsInfo().total).toBe(0);
+    mkdirSync(d);
+    for (let k = 1; k <= 2; k++) writeFileSync(join(d, slotName(k)), blankSlot());
+    now += 11_000;
+    images.beginRender();
+    expect(images.slotsInfo()).toMatchObject({ total: 2, left: 2 });
+    expect(dirty).toBeGreaterThan(0);
+  });
   it("images are off without slots or when the addon opted out", () => {
     const m = managerSetup(0);
     expect(m.images.resolve({ id: "x", name: "x.png", mimeType: "image/png", sizeBytes: 1 })).toEqual({ s: 0, st: "off" });

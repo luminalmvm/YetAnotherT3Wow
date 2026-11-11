@@ -95,16 +95,23 @@ export class ImageManager {
    */
   beginRender(): void {
     this.newThisRender = 0;
+    // Slots installed while the companion runs (WoW closed -> installer -> WoW started) are picked up.
+    if (this.o.pool.total === 0 && this.o.tools && this.now() - this.lastDiscover >= 10_000) {
+      this.lastDiscover = this.now();
+      if (this.o.pool.rediscover()) this.o.onDirty();
+    }
     if (this.slotsEnabled && !this.wowRefreshing && (!this.wowCache || this.now() - this.wowCache.at >= 5000)) {
       this.wowRefreshing = true;
       void this.syncWow().finally(() => { this.wowRefreshing = false; });
     }
   }
   private wowRefreshing = false;
+  private lastDiscover = 0;
 
   /** Applies the current WoW process to the pool. Returns true when the pool was reset. */
   private async syncWow(): Promise<boolean> {
     if (!this.o.pool.setWow(await this.wowKey())) return false;
+    this.o.pool.rediscover(); // a reinstall (more or fewer slots) happens with WoW closed
     this.recentSent.clear();
     this.failed.clear();
     this.o.onDirty();

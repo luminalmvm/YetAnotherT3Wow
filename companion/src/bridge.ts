@@ -62,11 +62,10 @@ export class Bridge {
     const doc: SnapshotDoc = { v: 1, sid: this.sid, seq, ts, ack: this.ack, asid: this.asid, threads };
     if (this.err) doc.err = this.err;
     const img = this.o.images;
-    if (img) doc.imgslots = img.slotsInfo();
+    if (img) { img.beginRender(); doc.imgslots = img.slotsInfo(); }
     const detail = t3.focusDetail();
     if (detail && focusT3Id && detail.id === focusT3Id && this.focus.tid) {
       const tid = this.focus.tid;
-      img?.beginRender();
       doc.focus = focusToSnap({
         detail, windowStart: this.focus.windowStart,
         resolveImage: img ? (ref) => img.resolve(ref, focusT3Id) : undefined,
