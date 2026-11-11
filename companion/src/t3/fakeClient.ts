@@ -3,7 +3,7 @@
 // exercised without T3 Code.
 import { EventEmitter } from "node:events";
 import { buildModelSelection, type T3Client } from "./client.js";
-import type { AttachmentInput, ChatMessage, ImageRef, ModelChoice, PendingRequest, ProjectSummary, ProviderSummary, ThreadDetail, ThreadSummary } from "./types.js";
+import type { AttachmentInput, ChatMessage, ImageRef, ModelChoice, PendingRequest, ProjectSummary, ProviderSummary, SubagentRef, ThreadDetail, ThreadSummary } from "./types.js";
 
 interface FakeThread { summary: ThreadSummary; messages: ChatMessage[]; pending: PendingRequest | null; streaming: boolean; nextRun: number; options?: { id: string; value: unknown }[] }
 
@@ -33,6 +33,14 @@ const LONG_REPLY = [
   "",
   "Smart quotes “like these”, an ellipsis… and an arrow → are transliterated for WoW fonts; pipes | stay raw.",
 ].join("\n");
+
+/** Fake subagent thread ids (shaped like T3's delegated-task and provider-native ids). */
+export const FAKE_KIDS = {
+  css: "thread:delegated-task:command%3Amcp%3Afa4e0101-0000-4000-8000-000000000101%3Adelegate-task%3Afa4e0102-0000-4000-8000-000000000102",
+  shot: "thread:delegated-task:command%3Amcp%3Afa4e0101-0000-4000-8000-000000000101%3Adelegate-task%3Afa4e0103-0000-4000-8000-000000000103",
+  tokens: "thread:provider:claudeAgent:native-thread:provider-thread%3Afake%3Aa0000000000000001",
+  vars: "thread:provider:claudeAgent:native-thread:provider-thread%3Afake%3Aa0000000000000002",
+};
 
 export class FakeT3Client extends EventEmitter implements T3Client {
   private map = new Map<string, FakeThread>();
@@ -64,6 +72,21 @@ export class FakeT3Client extends EventEmitter implements T3Client {
       mk("f6a7b8c9-0000-4000-8000-000000000006", "Profile the slow dashboard query (Postgres EXPLAIN)", "interrupted", "p-infra", "claude-opus-5-5", 90, 65),
       mk("a7b8c9d0-0000-4000-8000-000000000007", "Refactor auth middleware into its own package", "idle", "p-web", "claude-opus-5-5", 1500, 1400),
     ];
+    // Subagents of "Add dark mode toggle" (rev 1.4; ids shaped like T3's, all fake): two delegated tasks and
+    // two provider-native subagents (one nested under a delegated task). Native subagents stay "idle" like in T3.
+    const PARENT = "b2c3d4e5-0000-4000-8000-000000000002";
+    const sub = (id: string, title: string, status: string, parent: string, ageMin: number, durMin: number | null, native: boolean): ThreadSummary => ({
+      ...mk(id, title, status, "p-web", "claude-sonnet-5-5", ageMin, durMin),
+      isSubagent: true, createdBy: "agent", parentId: parent, rootId: PARENT, native,
+      ...(native ? { startedAt: null, completedAt: null, createdAt: now - ageMin * 60_000 } : {}),
+    });
+    const kids: ThreadSummary[] = [
+      sub(FAKE_KIDS.css, "Write the dark mode stylesheet", "running", PARENT, 2, null, false),
+      sub(FAKE_KIDS.tokens, "Map the colour tokens", "idle", PARENT, 3, 1, true),
+      sub(FAKE_KIDS.shot, "Screenshot test for dark mode", "completed", PARENT, 3, 2, false),
+      sub(FAKE_KIDS.vars, "Find hard-coded colours", "idle", FAKE_KIDS.css, 2, 1, true),
+    ];
+    threads.push(...kids);
     for (const s of threads) {
       const msgs: ChatMessage[] = [];
       const base = Math.floor((s.startedAt ?? now) / 1000);
@@ -78,11 +101,32 @@ export class FakeT3Client extends EventEmitter implements T3Client {
       if (s.pending?.kind === "user_input") fake.pending = { kind: "input", requestId: s.pending.id, t3Kind: "user_input", text: "CI: Which runner image should the workflow use?\n  1. ubuntu-latest\n  2. windows-latest", options: [{ id: "o1", label: "ubuntu-latest" }, { id: "o2", label: "windows-latest" }], questions: [{ id: "Which runner image should the workflow use?", header: "CI", question: "Which runner image should the workflow use?", multiSelect: false, options: [{ id: "o1", label: "ubuntu-latest", value: "ubuntu-latest" }, { id: "o2", label: "windows-latest", value: "windows-latest" }] }] };
       this.map.set(s.id, fake);
     }
+    // The parent's history refers to its subagents: a tool run with subagent links and the
+    // 'Delegated task "..." finished' notification (both VERIFIED shapes, rev 1.4).
+    const parent = this.map.get(PARENT)!;
+    const last = parent.messages[parent.messages.length - 1];
+    const ts = last.ts + 10;
+    parent.messages.push({ i: last.i + 1, role: "t", ts, streaming: false,
+      text: "Subagent: Map the colour tokens (done)\nSubagent: Write the dark mode stylesheet (running)\nSubagent: Screenshot test for dark mode (done)",
+      parts: [
+        { kind: "link", threadId: FAKE_KIDS.tokens, label: "Subagent: Map the colour tokens (done)" },
+        { kind: "link", threadId: FAKE_KIDS.css, label: "Subagent: Write the dark mode stylesheet (running)" },
+        { kind: "link", threadId: FAKE_KIDS.shot, label: "Subagent: Screenshot test for dark mode (done)" },
+      ] });
+    parent.messages.push({ i: last.i + 2, role: "s", ts: ts + 60, streaming: false, text: 'Delegated task "Screenshot test for dark mode" finished',
+      parts: [{ kind: "link", threadId: FAKE_KIDS.shot, label: 'Delegated task "Screenshot test for dark mode" finished' }] });
   }
 
   async start(): Promise<void> { this.emit("connection", true); }
   stop(): void { for (const t of this.timers) clearTimeout(t); this.timers.clear(); }
   threads(): ThreadSummary[] { return [...this.map.values()].map((t) => t.summary); }
+  family(rootId: string): ThreadSummary[] | null {
+    const out = this.threads().filter((t) => t.id === rootId || t.rootId === rootId);
+    return out.length ? out : null;
+  }
+  /** Roots the last render asked for (tests). */
+  wantedRoots: string[] = [];
+  wantFamilies(rootIds: string[]): void { this.wantedRoots = rootIds; }
   projects(): Map<string, ProjectSummary> { return this.projectMap; }
   providers(): ProviderSummary[] { return [{ instanceId: "claudeAgent", displayName: "Claude", enabled: true, models: MODELS }]; }
   models(id: string): ModelChoice[] { return id === "claudeAgent" ? MODELS : []; }
@@ -100,6 +144,10 @@ export class FakeT3Client extends EventEmitter implements T3Client {
     return {
       id: t.summary.id, title: t.summary.title, providerInstanceId: t.summary.providerInstanceId, modelSlug: t.summary.modelSlug, modelOptions: t.options ?? [{ id: "effort", value: "high" }],
       streaming: t.streaming, activeRunId: t.streaming ? "run" : null, pending: t.pending, messages: t.messages, hasOlder: false,
+      subagents: this.threads().filter((k) => k.parentId === t.summary.id).map((k): SubagentRef => ({
+        childThreadId: k.id, status: k.native ? "completed" : String(k.status), title: k.title, startedAt: k.startedAt ?? k.createdAt ?? null, completedAt: k.completedAt ?? (k.native ? k.updatedAt : null),
+      })),
+      parentId: t.summary.parentId ?? null, rootId: t.summary.rootId ?? t.summary.id,
     };
   }
 

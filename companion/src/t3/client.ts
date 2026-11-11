@@ -4,7 +4,7 @@
 import { randomUUID } from "node:crypto";
 import { EventEmitter } from "node:events";
 import { log } from "../log.js";
-import { buildPending, isActiveStatus, itemsToMessages, providersFromConfig, resolveEffort, selectionOptions, shellThreadToSummary, withEffort } from "./project.js";
+import { buildPending, isActiveStatus, itemsToMessages, lineageOf, providersFromConfig, resolveEffort, selectionOptions, shellThreadToSummary, subagentRefs, withEffort } from "./project.js";
 import type { AttachmentInput, ImageRef, ModelChoice, PendingRequest, ProjectSummary, ProviderSummary, ThreadDetail, ThreadSummary } from "./types.js";
 import { RpcSocket } from "./wsRpc.js";
 
@@ -43,9 +43,27 @@ export interface T3Client {
   interrupt(threadId: string): Promise<void>;
   respondApproval(threadId: string, requestId: string, decision: string, feedback?: string): Promise<void>;
   answerUserInput(threadId: string, requestId: string, answers: Record<string, unknown>): Promise<void>;
+  /**
+   * Every thread of one family (root + all subagent descendants), as last fetched, or null when not
+   * loaded yet (rev 1.4). VERIFIED live: WS `orchestration.getThreadFamily {threadId}` -> {snapshotSequence,
+   * threads[]} with shell rows of every thread sharing the root (idle and finished subagents included, which
+   * the filtered shell omits).
+   */
+  family(rootId: string): ThreadSummary[] | null;
+  /** The families the snapshot needs; the client fetches missing or changed ones and emits "change". */
+  wantFamilies(rootIds: string[]): void;
+  /** Shell rows plus cached family rows (optional; used to resolve a tid after a companion restart). */
+  knownThreads?(): ThreadSummary[];
   /** "change" whenever threads/focus/pending changed; "connection" on (dis)connect. */
   on(ev: "change" | "connection", fn: (...a: any[]) => void): this;
 }
+
+interface FamilyEntry { threads: ThreadSummary[]; sig: string; fetchedAt: number; dirty: boolean }
+
+/** Minimum time between two fetches of the same family (a running subagent updates the shell every few s). */
+export const FAMILY_REFRESH_MS = 4000;
+/** At most this many families are kept (the snapshot lists <= 30 top-level threads + the focused root). */
+const MAX_FAMILIES = 40;
 
 interface FocusState {
   threadId: string;
@@ -113,6 +131,10 @@ export class RpcT3Client extends EventEmitter implements T3Client {
   private reconnectTimer?: NodeJS.Timeout;
   private configTimer?: NodeJS.Timeout;
   private sentKeys = new Map<string, number>();
+  private families = new Map<string, FamilyEntry>();
+  private wanted: string[] = [];
+  private familyBusy = false;
+  private familyTimer?: NodeJS.Timeout;
 
   constructor(private readonly o: RpcT3ClientOptions) { super(); }
 
@@ -128,6 +150,7 @@ export class RpcT3Client extends EventEmitter implements T3Client {
     this.stopped = true;
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
     if (this.configTimer) clearInterval(this.configTimer);
+    if (this.familyTimer) clearTimeout(this.familyTimer);
     this.focusState?.cancel?.();
     this.shellCancel?.();
     this.sock?.close();
@@ -145,6 +168,7 @@ export class RpcT3Client extends EventEmitter implements T3Client {
     });
     this.emit("connection", true);
     await this.refreshConfig();
+    for (const f of this.families.values()) f.dirty = true;
     this.subscribeShell();
     if (this.focusState) this.subscribeFocus(this.focusState.threadId);
   }
@@ -181,7 +205,7 @@ export class RpcT3Client extends EventEmitter implements T3Client {
       case "snapshot": {
         const snap = item.snapshot ?? {};
         const enrichmentOnly = item.resolvedRepositoryIdentityRoots !== undefined && !(snap.threads?.length) && !(snap.archivedThreads?.length);
-        if (!enrichmentOnly) { this.threadMap.clear(); this.rawThreads.clear(); }
+        if (!enrichmentOnly) { this.threadMap.clear(); this.rawThreads.clear(); for (const f of this.families.values()) f.dirty = true; this.pumpFamilies(); }
         for (const p of snap.projects ?? []) this.projectMap.set(String(p.id), { id: String(p.id), title: String(p.title ?? "") });
         for (const t of snap.threads ?? []) this.upsertThread(t);
         break;
@@ -189,8 +213,14 @@ export class RpcT3Client extends EventEmitter implements T3Client {
       case "thread.updated":
         if (item.location === "archive") { this.threadMap.delete(String(item.thread.id)); this.rawThreads.delete(String(item.thread.id)); }
         else this.upsertThread(item.thread);
+        this.touchFamily(item.thread);
         break;
-      case "thread.removed": this.threadMap.delete(String(item.threadId)); this.rawThreads.delete(String(item.threadId)); break;
+      case "thread.removed": {
+        const raw = this.rawThreads.get(String(item.threadId));
+        if (raw) this.touchFamily(raw);
+        this.threadMap.delete(String(item.threadId)); this.rawThreads.delete(String(item.threadId));
+        break;
+      }
       case "project.updated": this.projectMap.set(String(item.project.id), { id: String(item.project.id), title: String(item.project.title ?? "") }); break;
       case "project.removed": this.projectMap.delete(String(item.projectId)); break;
       default: return;
@@ -213,10 +243,73 @@ export class RpcT3Client extends EventEmitter implements T3Client {
     const st = this.focusState;
     if (st && !this.threadMap.has(st.threadId) && st.thread && st.thread.id === st.threadId) {
       const s = shellThreadToSummary(st.thread);
-      if (!s.archived) out.push(s);
+      if (!s.archived) out.push({ ...s, partial: true });
     }
     return out;
   }
+
+  /** Shell rows plus every cached family row (resolving a subagent tid the snapshot has not named yet). */
+  knownThreads(): ThreadSummary[] {
+    const out = this.threads();
+    for (const f of this.families.values()) out.push(...f.threads);
+    return out;
+  }
+  /** A subagent changed (created, ran, finished): its family must be fetched again. */
+  private touchFamily(t: any): void {
+    if (t?.lineage?.relationshipToParent !== "subagent") return;
+    const root = lineageOf(t).rootId;
+    const f = root ? this.families.get(root) : undefined;
+    if (f && !f.dirty) { f.dirty = true; this.pumpFamilies(); }
+  }
+
+  family(rootId: string): ThreadSummary[] | null { return this.families.get(rootId)?.threads ?? null; }
+
+  wantFamilies(rootIds: string[]): void {
+    const next = [...new Set(rootIds.filter(Boolean))].slice(0, MAX_FAMILIES);
+    if (next.join("\n") === this.wanted.join("\n")) { this.pumpFamilies(); return; }
+    this.wanted = next;
+    for (const k of [...this.families.keys()]) if (!next.includes(k)) this.families.delete(k);
+    this.pumpFamilies();
+  }
+
+  /** Fetches one missing or dirty family at a time (throttled per family); emits "change" when one changed. */
+  private pumpFamilies(): void {
+    if (this.familyBusy || this.stopped || !this.sock?.isOpen) return;
+    const now = Date.now();
+    let wait = Infinity;
+    const root = this.wanted.find((r) => {
+      const f = this.families.get(r);
+      if (!f) return true;
+      if (!f.dirty) return false;
+      const left = f.fetchedAt + FAMILY_REFRESH_MS - now;
+      if (left <= 0) return true;
+      wait = Math.min(wait, left);
+      return false;
+    });
+    if (!root) {
+      if (wait !== Infinity && !this.familyTimer) this.familyTimer = setTimeout(() => { this.familyTimer = undefined; this.pumpFamilies(); }, wait);
+      return;
+    }
+    this.familyBusy = true;
+    const sock = this.sock;
+    sock.request("orchestration.getThreadFamily", { threadId: root }, 15000).then((r: any) => {
+      const list: any[] = Array.isArray(r?.threads) ? r.threads : [];
+      const threads = list.map(shellThreadToSummary).filter((t) => !t.archived);
+      const sig = threads.map((t) => `${t.id}|${t.status}|${t.activity}|${t.updatedAt}|${t.pending?.id ?? ""}|${t.title}`).join("\n");
+      const prev = this.families.get(root);
+      if (this.wanted.includes(root)) this.families.set(root, { threads, sig, fetchedAt: Date.now(), dirty: false });
+      if (!prev || prev.sig !== sig) this.emit("change", "family");
+    }).catch((e) => {
+      log.warn(`getThreadFamily failed: ${(e as Error).message}`);
+      // Keep what we had; try again after the throttle interval.
+      const prev = this.families.get(root);
+      this.families.set(root, { threads: prev?.threads ?? [], sig: prev?.sig ?? "", fetchedAt: Date.now(), dirty: true });
+    }).finally(() => {
+      this.familyBusy = false;
+      this.pumpFamilies();
+    });
+  }
+
   projects(): Map<string, ProjectSummary> { return this.projectMap; }
   providers(): ProviderSummary[] { return this.providerList; }
   models(providerInstanceId: string): ModelChoice[] {
@@ -283,6 +376,7 @@ export class RpcT3Client extends EventEmitter implements T3Client {
     const active = [...runs].reverse().find((r) => isActiveStatus(String(r.status)));
     const pending: PendingRequest | null = buildPending([...st.runtimeRequests.values()], items);
     const sel = st.thread?.modelSelection ?? {};
+    const lineage = st.thread?.lineage ? lineageOf({ ...st.thread, id: st.threadId }) : { parentId: shell?.parentId ?? null, rootId: shell?.rootId ?? null };
     return {
       id: st.threadId,
       title: shell?.title ?? String(st.thread?.title ?? ""),
@@ -294,6 +388,9 @@ export class RpcT3Client extends EventEmitter implements T3Client {
       pending,
       messages: itemsToMessages(items, { includeReasoning: this.o.includeReasoning }),
       hasOlder: st.hasMoreHistory,
+      subagents: subagentRefs(items),
+      parentId: lineage.parentId,
+      rootId: lineage.rootId,
     };
   }
 

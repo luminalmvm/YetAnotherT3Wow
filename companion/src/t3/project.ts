@@ -1,5 +1,5 @@
 // Pure projections from T3 wire objects (orchestration protocol 2) to companion domain types.
-import type { ChatMessage, EffortChoice, ImageRef, PendingRequest, ProviderSummary, ThreadSummary } from "./types.js";
+import type { ChatMessage, EffortChoice, ImageRef, MsgPart, PendingRequest, ProviderSummary, SubagentRef, ThreadSummary } from "./types.js";
 
 const toMs = (s: unknown): number | null => {
   if (typeof s !== "string") return null;
@@ -23,7 +23,26 @@ export function shellThreadToSummary(t: any): ThreadSummary {
     createdBy: String(t.createdBy ?? ""),
     archived: t.archivedAt != null || t.deletedAt != null,
     settled: t.settledAt != null,
+    ...lineageOf(t),
+    native: typeof t.id === "string" && t.id.startsWith("thread:provider:"),
+    activity: typeof t.activityRunStatus === "string" ? t.activityRunStatus : null,
+    createdAt: toMs(t.createdAt),
   };
+}
+
+/**
+ * Parent/root of a thread (VERIFIED live, T3 0.1.8): `lineage = {parentThreadId, relationshipToParent, rootThreadId}`.
+ * Top-level threads: parent null, root = their own id. Subagents (delegated tasks and provider-native
+ * subagents) point at their parent; forks also have a parent but are listed as top-level threads, so only
+ * `relationshipToParent === "subagent"` yields a parentId here (and a fork is its own root).
+ */
+export function lineageOf(t: any): { parentId: string | null; rootId: string | null } {
+  const l = t?.lineage;
+  const own = t?.id != null ? String(t.id) : null;
+  if (l?.relationshipToParent !== "subagent") return { parentId: null, rootId: own };
+  const parentId = typeof l?.parentThreadId === "string" ? l.parentThreadId : null;
+  const rootId = typeof l?.rootThreadId === "string" ? l.rootThreadId : parentId;
+  return { parentId, rootId };
 }
 
 export function providersFromConfig(cfg: any): ProviderSummary[] {
@@ -150,6 +169,48 @@ export function imageAttachments(raw: unknown): ImageRef[] {
   return out;
 }
 
+/**
+ * Links to other T3 threads in message text (VERIFIED live): assistant markdown such as
+ * `[label](t3-thread://v2/<environmentId>/<threadId>)`; the thread id is the last path segment, as is
+ * (child ids keep their `%3A` escapes: `thread:delegated-task:command%3Amcp%3A...`). Returns the text with
+ * bare links replaced by "(linked thread)" (markdown links keep their label) and up to `max` distinct links.
+ */
+export function extractThreadLinks(text: string, max = 6): { text: string; links: { threadId: string; label: string }[] } {
+  const links: { threadId: string; label: string }[] = [];
+  const add = (id: string, label: string) => {
+    if (!/^[A-Za-z0-9%:._~-]{1,600}$/.test(id) || links.some((l) => l.threadId === id) || links.length >= max) return;
+    links.push({ threadId: id, label });
+  };
+  const idOf = (url: string) => url.replace(/[?#].*$/, "").split("/").filter(Boolean).pop() ?? "";
+  let out = text.replace(/\[([^\]\n]+)\]\((t3-thread:\/\/[^)\s]+)\)/g, (m, label: string, url: string) => {
+    add(idOf(url.slice("t3-thread://".length)), label.replace(/[`*_]/g, "").trim() || "Linked thread");
+    return m;
+  });
+  out = out.replace(/(^|[^(])(t3-thread:\/\/[A-Za-z0-9%:._~\/-]+)/g, (_m, pre: string, url: string) => {
+    add(idOf(url.slice("t3-thread://".length)), "Linked thread");
+    return pre + "(linked thread)";
+  });
+  return { text: out, links };
+}
+
+/** The `subagent` turn items of a thread: child thread id and the run state the parent shows for it. */
+export function subagentRefs(items: any[]): SubagentRef[] {
+  const out: SubagentRef[] = [];
+  for (const it of items) {
+    if (!it || it.type !== "subagent" || typeof it.childThreadId !== "string" || !it.childThreadId) continue;
+    out.push({ childThreadId: it.childThreadId, status: String(it.status ?? ""), title: String(it.title ?? ""), startedAt: toMs(it.startedAt), completedAt: toMs(it.completedAt) });
+  }
+  return out;
+}
+
+/** Label of a subagent tool line that links to the child thread. */
+function subagentLabel(it: any): string {
+  const name = firstLine(it.title || it.prompt, 100) || "subagent";
+  const st = String(it.status ?? "");
+  const suffix = st === "running" || st === "starting" || st === "queued" ? " (running)" : st === "failed" ? " (failed)" : st === "completed" ? " (done)" : st ? ` (${st})` : "";
+  return `Subagent: ${name}${suffix}`;
+}
+
 export interface ItemsToMessagesOptions {
   includeReasoning?: boolean;
   maxToolLines?: number;
@@ -163,11 +224,19 @@ export function itemsToMessages(items: any[], o: ItemsToMessagesOptions = {}): C
   const maxTool = o.maxToolLines ?? 8;
   const sorted = [...items].filter((x) => x && typeof x.ordinal === "number").sort((a, b) => a.ordinal - b.ordinal);
   const out: ChatMessage[] = [];
-  let toolRun: { msg: ChatMessage; lines: string[]; extra: number } | null = null;
+  // Tool runs: plain lines, except subagent items with a child thread, which become links (rev 1.4)
+  // and do not count toward the line cap (at most 8 links per run).
+  let toolRun: { msg: ChatMessage; lines: string[]; parts: MsgPart[]; pending: string[]; links: number; extra: number } | null = null;
   const flushTool = () => {
     if (!toolRun) return;
-    const { msg, lines, extra } = toolRun;
-    msg.text = lines.join("\n") + (extra > 0 ? `\n(+${extra} more)` : "");
+    const { msg, lines, parts, pending, links, extra } = toolRun;
+    const more = extra > 0 ? `(+${extra} more)` : "";
+    msg.text = lines.join("\n") + (more ? `\n${more}` : "");
+    if (links > 0) {
+      const tail = [...pending, ...(more ? [more] : [])];
+      if (tail.length) parts.push({ kind: "text", text: tail.join("\n") });
+      msg.parts = parts;
+    }
     out.push(msg);
     toolRun = null;
   };
@@ -176,21 +245,32 @@ export function itemsToMessages(items: any[], o: ItemsToMessagesOptions = {}): C
     const ts = Math.floor((toMs(it.startedAt) ?? toMs(it.updatedAt) ?? Date.now()) / 1000);
     const streaming = it.streaming === true || it.status === "running";
     if (TOOL_TYPES.has(it.type)) {
-      if (!toolRun) toolRun = { msg: { i, role: "t", ts, text: "", streaming }, lines: [], extra: 0 };
-      if (toolRun.lines.length < maxTool) toolRun.lines.push(toolLine(it)); else toolRun.extra++;
+      if (!toolRun) toolRun = { msg: { i, role: "t", ts, text: "", streaming }, lines: [], parts: [], pending: [], links: 0, extra: 0 };
+      const isLink = it.type === "subagent" && typeof it.childThreadId === "string" && it.childThreadId !== "" && toolRun.links < 8;
+      if (isLink) {
+        const label = subagentLabel(it);
+        toolRun.lines.push(label);
+        if (toolRun.pending.length) { toolRun.parts.push({ kind: "text", text: toolRun.pending.join("\n") }); toolRun.pending = []; }
+        toolRun.parts.push({ kind: "link", threadId: it.childThreadId, label });
+        toolRun.links++;
+      } else if (toolRun.lines.length - toolRun.links < maxTool) {
+        const line = toolLine(it);
+        toolRun.lines.push(line);
+        toolRun.pending.push(line);
+      } else toolRun.extra++;
       toolRun.msg.streaming = toolRun.msg.streaming || streaming;
       continue;
     }
     let msg: ChatMessage | null = null;
     switch (it.type) {
       case "user_message": {
-        msg = { i, role: "u", ts, text: String(it.text ?? ""), streaming: false };
+        msg = withLinks({ i, role: "u", ts, text: String(it.text ?? ""), streaming: false });
         const images = imageAttachments(it.attachments);
         if (images.length) msg.images = images;
         break;
       }
-      case "assistant_message": msg = { i, role: "a", ts, text: String(it.text ?? ""), streaming }; break;
-      case "proposed_plan": msg = { i, role: "a", ts, text: String(it.markdown ?? ""), streaming }; break;
+      case "assistant_message": msg = withLinks({ i, role: "a", ts, text: String(it.text ?? ""), streaming }); break;
+      case "proposed_plan": msg = withLinks({ i, role: "a", ts, text: String(it.markdown ?? ""), streaming }); break;
       case "reasoning": if (o.includeReasoning) msg = { i, role: "s", ts, text: `(thinking) ${firstLine(it.text, 300)}`, streaming }; break;
       case "todo_list": msg = { i, role: "s", ts, text: (it.steps ?? []).map((s: any) => `[${s.status === "completed" ? "x" : s.status === "in_progress" ? ">" : " "}] ${s.step ?? s.text ?? ""}`).join("\n"), streaming: false }; break;
       case "approval_request": msg = { i, role: "s", ts, text: approvalText(it), streaming: false }; break;
@@ -200,13 +280,30 @@ export function itemsToMessages(items: any[], o: ItemsToMessagesOptions = {}): C
       case "run_interrupt_result":
       case "system_notice": msg = { i, role: "s", ts, text: String(it.message ?? it.type), streaming: false }; break;
       case "compaction": msg = { i, role: "s", ts, text: "(context compacted)", streaming: false }; break;
-      case "notification": if (it.summary) msg = { i, role: "s", ts, text: String(it.summary), streaming: false }; break;
+      case "notification": {
+        if (!it.summary) break;
+        const text = String(it.summary);
+        msg = { i, role: "s", ts, text, streaming: false };
+        // 'Delegated task "X" finished' / 'Subagent "X" failed' (VERIFIED live): source.childThreadId names the child.
+        const child = it.source?.childThreadId;
+        if (typeof child === "string" && child) msg.parts = [{ kind: "link", threadId: child, label: text }];
+        break;
+      }
       default: break; // checkpoint, handoff, fork, thread_created, secret/link requests: not shown
     }
     if (msg) { flushTool(); out.push(msg); }
   }
   flushTool();
   return out;
+}
+
+/** Adds link parts for t3-thread links in a user/assistant message (rev 1.4); text keeps the labels. */
+function withLinks(m: ChatMessage): ChatMessage {
+  if (!m.text.includes("t3-thread://")) return m;
+  const { text, links } = extractThreadLinks(m.text);
+  m.text = text;
+  if (links.length) m.parts = [{ kind: "text", text }, ...links.map((l): MsgPart => ({ kind: "link", threadId: l.threadId, label: l.label }))];
+  return m;
 }
 
 /** Builds the pending request (approval or input) from runtime requests + their turn items. */

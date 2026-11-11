@@ -25,9 +25,20 @@ export interface ActionContext {
 }
 
 function threadIdFor(ctx: ActionContext, tid: string): string {
-  const id = ctx.tids.resolve(tid);
+  const id = ctx.tids.resolve(tid) ?? findTid(ctx, tid);
   if (!id) throw new ActionError(`Unknown thread ${tid}`);
   return id;
+}
+
+/**
+ * A tid this companion has not sent yet (rev 1.4: after a restart the addon may still show a subagent that the
+ * new snapshot does not list): tids are derived from the T3 id, so map the known threads (shell + fetched
+ * families) until one gives the same tid.
+ */
+function findTid(ctx: ActionContext, tid: string): string | undefined {
+  const known = ctx.t3.knownThreads ? ctx.t3.knownThreads() : ctx.t3.threads();
+  for (const t of known) if (ctx.tids.tid(t.id) === tid) return t.id;
+  return undefined;
 }
 
 export function defaultOpenUrl(url: string): void {

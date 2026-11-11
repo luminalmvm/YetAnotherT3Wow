@@ -2,7 +2,7 @@
 import { randomBytes } from "node:crypto";
 import { ActionError, executeCommand, type ActionContext } from "./actions.js";
 import { log } from "./log.js";
-import { DEFAULT_CAPS, emptySnapshotLua, fitSnapshot, focusToSnap, RidMap, selectThreads, threadToSnap, TidMap, type Caps, type SnapshotDoc } from "./model/snapshot.js";
+import { buildThreadTree, DEFAULT_CAPS, emptySnapshotLua, fitSnapshot, focusToSnap, RidMap, TidMap, type Caps, type SnapshotDoc } from "./model/snapshot.js";
 import type { T3Client } from "./t3/client.js";
 import type { ImageManager } from "./images/manager.js";
 import { parseCommand, type Frame } from "./wow/frameCodec.js";
@@ -55,16 +55,27 @@ export class Bridge {
   buildDoc(seq: number, ts: number): SnapshotDoc {
     const t3 = this.o.t3;
     const focusT3Id = this.focus.tid ? this.tids.resolve(this.focus.tid) ?? null : null;
-    const list = selectThreads(t3.threads(), { maxThreads: this.caps.maxThreads, focusId: focusT3Id });
     const providers = t3.providers();
     const projects = t3.projects();
-    const threads = list.map((t) => threadToSnap(t, this.tids, projects, providers, this.caps));
-    const doc: SnapshotDoc = { v: 1, sid: this.sid, seq, ts, ack: this.ack, asid: this.asid, threads };
+    const loaded = t3.focusDetail();
+    const detail = loaded && focusT3Id && loaded.id === focusT3Id ? loaded : null;
+    // Threads with their subagents (rev 1.4): top-level rows, subagent rows (subs) and the focused
+    // thread's parent / kids / breadcrumb. Families are fetched by the client in the background.
+    const tree = buildThreadTree({
+      shell: t3.threads(),
+      familyOf: (root) => t3.family(root),
+      focusId: focusT3Id,
+      focusSubagents: detail?.subagents,
+      focusLineage: detail ? { parentId: detail.parentId, rootId: detail.rootId } : undefined,
+      focusTitle: detail?.title,
+    }, this.tids, projects, providers, this.caps);
+    t3.wantFamilies(tree.wantRoots);
+    const doc: SnapshotDoc = { v: 1, sid: this.sid, seq, ts, ack: this.ack, asid: this.asid, threads: tree.threads };
+    if (tree.subs.length) doc.subs = tree.subs;
     if (this.err) doc.err = this.err;
     const img = this.o.images;
     if (img) { img.beginRender(); doc.imgslots = img.slotsInfo(); }
-    const detail = t3.focusDetail();
-    if (detail && focusT3Id && detail.id === focusT3Id && this.focus.tid) {
+    if (detail && focusT3Id && this.focus.tid) {
       const tid = this.focus.tid;
       doc.focus = focusToSnap({
         detail, windowStart: this.focus.windowStart,
@@ -72,6 +83,7 @@ export class Bridge {
         imageWindow: this.caps.focusWindow,
         staged: img?.stagedFor(tid).map((s) => ({ aid: s.aid, s: s.slot, ...(s.slot ? { w: s.w, h: s.h } : {}), name: s.name })),
         notice: img?.notice(tid),
+        tree: tree.focus,
       }, this.tids, this.rids, providers, this.caps);
     }
     return doc;

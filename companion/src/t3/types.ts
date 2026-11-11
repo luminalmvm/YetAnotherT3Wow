@@ -28,6 +28,24 @@ export interface ThreadSummary {
   createdBy: string;
   archived: boolean;
   settled: boolean;
+  /**
+   * Subagent lineage (VERIFIED live, T3 0.1.8): `lineage.parentThreadId` / `lineage.rootThreadId`.
+   * Only threads with `relationshipToParent === "subagent"` are children (forks also carry a parent but
+   * are listed like top-level threads). Optional so older fakes/tests stay valid.
+   */
+  parentId?: string | null;
+  rootId?: string | null;
+  /** A provider-native subagent thread (Claude `Agent` tool, Codex spawn_agent): `thread:provider:...` ids. */
+  native?: boolean;
+  /** `activityRunStatus` (non-null while a native subagent's run is live; its `status` stays "idle"). */
+  activity?: string | null;
+  /** epoch ms */
+  createdAt?: number | null;
+  /**
+   * Built from the focused thread's projection (no shell row): it lacks `status` and run times, so any shell
+   * or family row of the same thread wins over it (rev 1.4).
+   */
+  partial?: boolean;
 }
 
 export interface ProjectSummary { id: string; title: string }
@@ -52,6 +70,13 @@ export interface ImageRef { id: string; name: string; mimeType: string; sizeByte
 /** An attachment for message.dispatch (an uploaded image: `attachments.createUploadUrl` id). */
 export interface AttachmentInput { type: "image"; id: string; name: string; mimeType: string; sizeBytes: number }
 
+/**
+ * Ordered message parts (rev 1.4): plain text and links to other T3 threads (subagent/child threads,
+ * `t3-thread://` links). When present they replace `text` for the snapshot segments; `text` stays the
+ * plain-text form (copy, byte counts).
+ */
+export type MsgPart = { kind: "text"; text: string } | { kind: "link"; threadId: string; label: string };
+
 export interface ChatMessage {
   /** Stable, monotonic message index (derived from T3 turn-item ordinals). */
   i: number;
@@ -63,7 +88,12 @@ export interface ChatMessage {
   streaming: boolean;
   /** Image attachments (user messages). */
   images?: ImageRef[];
+  /** Text + thread links in order (rev 1.4). */
+  parts?: MsgPart[];
 }
+
+/** A `subagent` turn item of a thread (VERIFIED live): the child thread and the parent's view of its run. */
+export interface SubagentRef { childThreadId: string; status: string; title: string; startedAt: number | null; completedAt: number | null }
 
 export interface PendingOption { id: string; label: string }
 
@@ -90,4 +120,9 @@ export interface ThreadDetail {
   /** Oldest first. */
   messages: ChatMessage[];
   hasOlder: boolean;
+  /** The thread's `subagent` turn items (child thread id + run state as the parent sees it), rev 1.4. */
+  subagents?: SubagentRef[];
+  /** Lineage of the focused thread itself (from its projection), rev 1.4. */
+  parentId?: string | null;
+  rootId?: string | null;
 }
