@@ -31,7 +31,11 @@ WoW addons cannot open files or sockets. They can only load files that existed w
 3. To poll, the addon calls `LoadAddOn` on the next unused slot. The client reads the file from disk again, the file sets the global `T3B_IN`, and the addon validates it (`T3B_IN_END` must match `seq`, otherwise it was a torn read and is retried).
 4. Each slot can load only once per session, so **one poll uses one slot**. The cadence adapts: every 15 s idle, 3 s while a thread runs, 1 s while the chat window is open and T3 is writing. When slots run low the addon offers a `/reload`, which frees them all.
 
-The snapshot holds up to 30 open threads (not settled, archived, deleted or subagent threads; the thread open in game is always included), ordered needs-you, running, then most recent. Only the open thread's messages are included (a 40-message window, 8000 bytes per message, 480 KiB in total). On a clean stop the companion overwrites `live.lua` and `T3Bridge\Inbox.lua` with an empty snapshot.
+The snapshot holds up to 30 open top-level threads (not settled, archived, deleted or subagent threads; the thread open in game is always included), ordered needs-you, running, then most recent. Only the open thread's messages are included (a 40-message window, 8000 bytes per message, 480 KiB in total). On a clean stop the companion overwrites `live.lua` and `T3Bridge\Inbox.lua` with an empty snapshot.
+
+### Subagent threads (PROTOCOL rev 1.4)
+
+T3 gives every subagent its own thread (delegated tasks and provider-native subagents such as Claude's `Agent` tool), linked to its parent by `lineage` ([t3-api-notes.md §11](t3-api-notes.md#11-subagents-2026-11-11-protocol-rev-14)). The filtered shell subscription omits idle and finished subagents, so the companion also fetches each listed thread's family with `orchestration.getThreadFamily` (one call per family, again at most every 4 s when a subagent in it changes) and merges it with the live shell rows (the newer row wins). Top-level rows get `kids`/`kidsRunning`/`kidsNeed`; up to 8 subagents per row (40 in total) go into `subs`; the focused thread gets `focus.parent`, `focus.kids` (20) and `focus.path` (breadcrumb, 4 entries). A focused subagent is listed with `parent=` even when finished. Messages that refer to a child thread (T3's 'Delegated task "X" finished' line, a subagent in a tool run, a `t3-thread://` link) carry `{"tl", label, id=}` segments. In game, the chat window shows an Up arrow and a clickable breadcrumb for a subagent and a collapsible Subagents strip for a parent; the tracker shows a badge (`+3`, `1 running`, `1 needs you`) that lists the subagents under their row; the thread menu indents them under their parent. No new outbound command: `focus <tid>` opens a subagent like any thread.
 
 `Inbox.lua` is a fallback listed in the addon's TOC: it is read only at login or `/reload`.
 
@@ -80,7 +84,7 @@ Sending pictures: Ctrl+V in the message box or the Attach button sends `clip` (t
 | `Spike.lua` | In-game self-tests (`/t3 spike …`) |
 | `Slash.lua` | `/t3` commands, each run in a protected call |
 
-SavedVariables (`T3BridgeDB`) store only positions, settings, per-thread collapse state keyed by thread id and the image spike result (`img.works`, `img.reloadFrees`). They never contain titles, message text or images.
+SavedVariables (`T3BridgeDB`) store only positions, settings, per-thread collapse state and opened subagent lists keyed by thread id, and the image spike result (`img.works`, `img.reloadFrees`). They never contain titles, message text or images.
 
 ## Development history
 

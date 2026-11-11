@@ -104,7 +104,7 @@ Per-thread fields used by the bridge ([fixture](fixtures/shell-snapshot.sample.j
 | start / end | `latestRunStartedAt` (or `latestRunRequestedAt`), `latestRunCompletedAt` (ISO strings) |
 | model | `modelSelection: {instanceId, model, options:[{id,value}]}`, `providerInstanceId` |
 | project | `projectId` → `projects[].title` |
-| subagents | `lineage.relationshipToParent === "subagent"`. The bridge hides these. |
+| subagents | `lineage.relationshipToParent === "subagent"` with `lineage.parentThreadId` / `rootThreadId` (§11). Not top-level rows; listed under their parent (PROTOCOL rev 1.4). |
 | hidden | `archivedAt`, `deletedAt`, `settledAt` |
 
 The bridge maps the status to the protocol's `st` (PROTOCOL.md §2.2) like this: active statuses → `running`,
@@ -179,7 +179,7 @@ and ignores the rest. See the [fixture](fixtures/thread-stream-items.sample.json
    ```
    Failures come back as `exit: {_tag:"Failure", cause:…}` with tagged errors (for example `OrchestrationV2DispatchCommandError`).
 4. Methods used: `server.getConfig`, `orchestration.subscribeShell`, `orchestration.subscribeThread`, `attachments.createUploadUrl`, `assets.createUrl` (§10),
-   `orchestration.dispatchCommand`, and `orchestration.launchThread` (only for the throwaway-thread spike).
+   `orchestration.getThreadFamily` (§11), `orchestration.dispatchCommand`, and `orchestration.launchThread` (only for the throwaway-thread spike).
    Other methods in the bundle: `getThreadProjection`, `getTurnItem` (full output of omitted items), `searchThread(s)`,
    `getThreadFamily`, `forceStopThread`, `subscribeCommandOutput`, … (INFERRED).
 
@@ -335,3 +335,70 @@ None of the user's threads were touched. Redacted shapes: [fixture](fixtures/ima
 - The T3 Code MCP tools `t3_attachment_prepare_upload` / `t3_thread_send_attachments` are the same flow behind
   T3's own MCP server (bundle: "POST the file's exact bytes to `relativeUrl` … then send with the returned
   `attachmentId`"); the bridge uses the WebSocket methods directly.
+
+## 11. Subagents (2026-11-11, PROTOCOL rev 1.4)
+
+All read-only against the live server (the user's own threads were only read: shell, `getThreadFamily`,
+`subscribeThread` snapshots, `GET …/threads/:id`). Nothing was written. Ids below are placeholders; redacted shapes
+are in [fixtures/subagents.sample.json](fixtures/subagents.sample.json).
+
+### 11.1 Every subagent is a thread (VERIFIED)
+- **Delegated tasks** (T3 MCP `delegate_task`): id `thread:delegated-task:command%3Amcp%3A<uuid>%3Adelegate-task%3A<uuid>`,
+  `createdBy:"agent"`, `creationSource:"mcp"`, a real run (`status` running/completed/failed/cancelled/interrupted,
+  `latestRunStartedAt`/`CompletedAt`), its own model selection, runtime requests and history.
+- **Provider-native subagents** (Claude's `Agent` tool): **they get their own T3 thread too**, id
+  `thread:provider:claudeAgent:native-thread:provider-thread%3A…%3A<nativeTaskId>`, `createdBy:"agent"`,
+  `creationSource:"provider"`. Their history holds the prompt (`user_message`), the tool calls and the final
+  `assistant_message`. They have **no runs**: `status` stays `"idle"`, `latestRun*` are null; while one runs,
+  `activityRunStatus` is set (INFERRED from the bundle's `isLiveSubagentShell`; none was live during the check).
+  Their run state as the parent sees it is in the parent's `subagent` turn item (11.3).
+- **Codex `spawn_agent`** (INFERRED, bundle only, no Codex subagent on this machine): the Codex adapter turns
+  `collabAgentToolCall` items with `tool:"spawnAgent"` into the same subagent nodes and child threads
+  (`origin:"provider_native"`), so they should appear the same way with a `thread:provider:codex:…` id.
+- Counts in the live shell: 1404 threads; 1049 with `relationshipToParent:"subagent"` (815 native, 234 delegated),
+  4 forks (`"fork"`, which also carry a parent but are listed as normal threads), 351 top-level. Deepest chain: 2
+  (top-level → delegated task → native subagent).
+- Delegated and native children accept the same reads as any thread: `subscribeThread {threadId: <child id>}` returned
+  a normal bounded snapshot whose `projection.thread.lineage` names the parent. Writes were not tried on the user's
+  threads; the commands are the generic thread commands (§6), so the bridge sends them unchanged.
+
+### 11.2 Lineage (VERIFIED)
+Every shell row has `lineage = {parentThreadId, relationshipToParent, rootThreadId}`:
+top-level `{null, null, <own id>}`; subagent `{<parent id>, "subagent", <root id>}`. Shell rows also have
+`pendingBackgroundTasks: [{taskId, description, kind:"subagent", providerInstanceId, childThreadId}]` on a parent while
+a delegated child runs.
+
+**The filtered shell omits most subagents.** With `omitIdleSubagents=1` the server keeps a subagent only if it is live
+(`activityRunStatus` set, an active `status`, a pending request or background tasks) or is itself a parent
+(bundle: `omitIdleSubagentShellsWith`). Live check: of the main thread's 13 children only the running one was in the
+filtered shell. Without the filter the shell is 2.8 MB / ~1 s (1155 threads), so the companion does not use it.
+
+**`orchestration.getThreadFamily {threadId}`** (WS, scope `orchestration:read`; bundle `readOmittableShellRows({familyOf})`)
+returns `{snapshotSequence, threads[]}`: shell rows of every thread with the same `rootThreadId` (root included), idle
+and finished subagents included. Live: 14 rows / 34 KB / ~30 ms for a thread with 13 children; the same 14 when asked
+with a child's id. The companion fetches the family of each listed thread and of the focused thread's root, and fetches
+one again (at most every 4 s) when a subagent of it changes in the shell stream.
+
+### 11.3 How the parent's history refers to its children (VERIFIED)
+- **`subagent` turn items** (in the parent): `{type:"subagent", status, title, startedAt, completedAt, childThreadId,
+  subagentId, origin:"provider_native"|"app_owned", driver, providerInstanceId, prompt, progress, result}`. One per
+  child, native and delegated alike; `status` is the child's run state as the parent sees it (running, completed,
+  failed). `projection.subagents[]` holds the matching nodes (`childThreadId`, `nativeTaskRef`, `prompt`).
+- **`notification` items**: `{type:"notification", summary:'Delegated task "X" finished', outcome,
+  source:{kind:"delegated_task", taskIds:[…], childThreadId}}`, and for native subagents
+  `summary:'Subagent "X" failed', source:{kind:"background_task", work:"subagent", childThreadId}`.
+- **`dynamic_tool` items** for `mcp__t3-code__delegate_task`: `input` = the task JSON (title, role, target, task…),
+  `output` = `{"taskId":"node:delegated-task:…"}` (no child thread id; the bridge ignores these).
+- **Assistant text**: Markdown links `[label](t3-thread://v2/<environmentId>/<threadId>)`; the thread id is the raw id
+  (child ids keep their `%3A` escapes). Seen 18 times in the main thread.
+
+### 11.4 How the bridge uses it
+- `threads`: open top-level threads as before (subagents never become top-level rows), with `kids` / `kidsRunning` /
+  `kidsNeed`; `subs`: up to 8 children per listed thread, 40 in total; the focused subagent and its ancestors are listed
+  with `parent` even when finished or settled (PROTOCOL D19).
+- Run state: a delegated task's own `status`; for a native subagent (always `idle`) the parent's `subagent` item status
+  when the parent is the focused thread, `activityRunStatus` while live, else "completed" (an idle native subagent has
+  finished). Times for native subagents: `createdAt` / `updatedAt` (or the item's `startedAt` / `completedAt`).
+- Links: `subagent` items with a `childThreadId` and `notification` items with `source.childThreadId` become `tl`
+  segments; `t3-thread://` links in user/assistant text keep their label in the text and add a `tl` segment
+  (PROTOCOL D21).

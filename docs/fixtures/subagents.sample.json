@@ -1,0 +1,66 @@
+{
+  "_comment": "Subagent threads, T3 Code 0.1.8 (orchestration protocol 2). Shapes observed read-only on the live server (2026-11-11); every id, title, prompt and time is a placeholder, and fields the bridge does not read are left out. See docs/t3-api-notes.md section 11.",
+  "shellRows": {
+    "topLevel": {
+      "id": "fa4e0050-0000-4000-8000-000000000050", "title": "Example parent thread", "status": "completed",
+      "createdBy": "user", "creationSource": "web",
+      "lineage": { "parentThreadId": null, "relationshipToParent": null, "rootThreadId": "fa4e0050-0000-4000-8000-000000000050" },
+      "activityRunStatus": null,
+      "pendingBackgroundTasks": [
+        { "taskId": "turn-item:delegated-task:command%3Amcp%3Afa4e0051-0000-4000-8000-000000000051%3Adelegate-task%3Afa4e0052-0000-4000-8000-000000000052",
+          "description": "Example delegated task", "kind": "subagent", "providerInstanceId": "claudeAgent_2",
+          "childThreadId": "thread:delegated-task:command%3Amcp%3Afa4e0051-0000-4000-8000-000000000051%3Adelegate-task%3Afa4e0052-0000-4000-8000-000000000052" }
+      ]
+    },
+    "delegatedTask": {
+      "id": "thread:delegated-task:command%3Amcp%3Afa4e0051-0000-4000-8000-000000000051%3Adelegate-task%3Afa4e0052-0000-4000-8000-000000000052",
+      "title": "Example delegated task", "status": "running", "createdBy": "agent", "creationSource": "mcp",
+      "lineage": { "parentThreadId": "fa4e0050-0000-4000-8000-000000000050", "relationshipToParent": "subagent", "rootThreadId": "fa4e0050-0000-4000-8000-000000000050" },
+      "latestRunStartedAt": "2026-01-01T10:00:00.000Z", "latestRunCompletedAt": null,
+      "activityRunStatus": "running", "activityRunStartedAt": "2026-01-01T10:00:00.000Z"
+    },
+    "nativeSubagent": {
+      "id": "thread:provider:claudeAgent:native-thread:provider-thread%3Aprovider%3AclaudeAgent%3Anative-thread%3Apending%253Arun%253Athread%253Afa4e0050-0000-4000-8000-000000000050%253Aordinal%253A1%3Aa0000000000000001",
+      "title": "Example native subagent", "status": "idle", "createdBy": "agent", "creationSource": "provider",
+      "lineage": { "parentThreadId": "fa4e0050-0000-4000-8000-000000000050", "relationshipToParent": "subagent", "rootThreadId": "fa4e0050-0000-4000-8000-000000000050" },
+      "latestRunStartedAt": null, "latestRunCompletedAt": null, "activityRunStatus": null,
+      "createdAt": "2026-01-01T09:00:00.000Z", "updatedAt": "2026-01-01T09:08:00.000Z"
+    }
+  },
+  "getThreadFamily": {
+    "request": { "_tag": "Request", "id": "9", "tag": "orchestration.getThreadFamily", "payload": { "threadId": "fa4e0050-0000-4000-8000-000000000050" }, "headers": [] },
+    "response": { "snapshotSequence": 1000, "threads": ["<shell rows of the root and every subagent with the same rootThreadId>"] }
+  },
+  "parentTurnItems": {
+    "subagentNative": {
+      "type": "subagent", "status": "completed", "title": "Example native subagent", "origin": "provider_native", "driver": "claudeAgent",
+      "startedAt": "2026-01-01T09:00:00.000Z", "completedAt": "2026-01-01T09:08:00.000Z",
+      "childThreadId": "thread:provider:claudeAgent:native-thread:provider-thread%3Aprovider%3AclaudeAgent%3Anative-thread%3Apending%253Arun%253Athread%253Afa4e0050-0000-4000-8000-000000000050%253Aordinal%253A1%3Aa0000000000000001",
+      "prompt": "<task prompt>", "progress": null, "result": "<final report>"
+    },
+    "subagentDelegated": {
+      "type": "subagent", "status": "running", "title": "Example delegated task", "origin": "app_owned", "driver": "claudeAgent",
+      "childThreadId": "thread:delegated-task:command%3Amcp%3Afa4e0051-0000-4000-8000-000000000051%3Adelegate-task%3Afa4e0052-0000-4000-8000-000000000052",
+      "prompt": "<task prompt>", "progress": null, "result": null
+    },
+    "notificationDelegated": {
+      "type": "notification", "summary": "Delegated task \"Example delegated task\" finished", "outcome": "completed",
+      "source": { "kind": "delegated_task", "taskIds": ["node:delegated-task:command%3Amcp%3Afa4e0051-0000-4000-8000-000000000051%3Adelegate-task%3Afa4e0052-0000-4000-8000-000000000052"],
+        "childThreadId": "thread:delegated-task:command%3Amcp%3Afa4e0051-0000-4000-8000-000000000051%3Adelegate-task%3Afa4e0052-0000-4000-8000-000000000052" }
+    },
+    "notificationNative": {
+      "type": "notification", "summary": "Subagent \"Example native subagent\" failed", "outcome": "failed",
+      "source": { "kind": "background_task", "work": "subagent",
+        "childThreadId": "thread:provider:claudeAgent:native-thread:provider-thread%3Aprovider%3AclaudeAgent%3Anative-thread%3Apending%253Arun%253Athread%253Afa4e0050-0000-4000-8000-000000000050%253Aordinal%253A1%3Aa0000000000000001" }
+    },
+    "delegateTaskToolCall": {
+      "type": "dynamic_tool", "toolName": "mcp__t3-code__delegate_task",
+      "input": "{\"title\":\"Example delegated task\",\"role\":\"implementation\",\"mode\":\"async\",\"task\":\"<task>\"}",
+      "output": "{\"taskId\":\"node:delegated-task:command%3Amcp%3Afa4e0051-0000-4000-8000-000000000051%3Adelegate-task%3Afa4e0052-0000-4000-8000-000000000052\"}"
+    },
+    "assistantLink": {
+      "type": "assistant_message",
+      "text": "Track A ([example task](t3-thread://v2/fa4e0053-0000-4000-8000-000000000053/thread:delegated-task:command%3Amcp%3Afa4e0051-0000-4000-8000-000000000051%3Adelegate-task%3Afa4e0052-0000-4000-8000-000000000052)) is done."
+    }
+  }
+}

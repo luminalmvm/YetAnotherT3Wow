@@ -35,6 +35,7 @@
 - **Native-style chat window.** Switch threads, read replies with light markdown, send messages with Enter.
 - **Model and effort pickers.** Change the thread's model and reasoning effort from the window's dropdowns.
 - **Collapsible rows.** Right-click a row (or its +/−) to fold it; rows that need you expand again by themselves.
+- **Subagents.** Open a thread's subagents from the Subagents bar, the tracker badge (`+3`, `1 running`) or a link in the history; the Up arrow and the breadcrumb lead back.
 - **Approvals and questions.** Allow / deny tool requests and answer agent questions in game.
 - **Images.** Pictures in a thread show inline (click to enlarge). Attach a copied image (Ctrl+V in the message box, or the Attach button) or your latest WoW screenshot.
 - **Minimap button.** Opens the window; finds a free spot on the ring and can be dragged.
@@ -138,6 +139,7 @@ Your settings stay in `WTF\Account\<account>\SavedVariables\T3Bridge.lua`; delet
 | `/t3` | Open or close the chat window (`/t3bridge` works too) |
 | `/t3 help` | List commands |
 | `/t3 demo` | Sample threads without the companion (again to leave) |
+| `/t3 up` | From a subagent thread back to its parent (same as the Up arrow) |
 | `/t3 status` | Link, slot, snapshot and outbound details |
 | `/t3 tracker on\|off\|reset\|auto\|below\|above\|free` | Show or place the tracker (`free`: Shift-drag the header) |
 | `/t3 minimap on\|off\|reset` | Minimap button |

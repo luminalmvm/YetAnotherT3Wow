@@ -1,4 +1,13 @@
-# T3Bridge wire protocol, v1 (revision 1.3)
+# T3Bridge wire protocol, v1 (revision 1.4)
+
+> **Revision 1.4 (subagent threads, 2026-11-11), backward compatible, wire version stays `1`, no new commands:**
+> D19 adds subagent lineage to thread summaries (`parent`, `kids`, `kidsRunning`, `kidsNeed`) and the top-level
+> `subs` list of subagent rows; D20 adds `focus.parent`, `focus.kids`, `focus.nkids` and `focus.path` (breadcrumb);
+> D21 adds thread-link message segments `{"tl","<label>",id="<tid>"}`. A subagent thread is an ordinary thread:
+> `focus <tid>` opens it and `send`, `model`, `intr`, `ans`, `hist`, `clip`, `shot`, `unstage` work on it unchanged.
+> A 1.3 addon ignores `subs` and the new `focus` fields, shows a `tl` segment as plain text (its 2nd element), and,
+> only while a subagent is focused, lists that subagent (and its ancestors below the root) as ordinary rows,
+> exactly as it already listed a focused settled thread. A 1.3 companion never sends any of it.
 
 > **Revision 1.3 (images, 2026-11-11), backward compatible, wire version stays `1`:** D16 adds image slot
 > textures and `{"img", …}` message segments plus top-level `imgslots`; D17 adds staged attachments
@@ -33,6 +42,10 @@
 > ignore the new fields, show at most their first 12 threads, and show `**`/`# ` marks literally.
 > Older companions ignore the 4th `model` field.
 
+Test data for rev 1.4: `protocol/fixtures/live.sample.lua` now carries `subs` (5 subagent rows), `kids` /
+`kidsRunning` on two rows, `focus.kids` / `focus.nkids` and two `tl` segments; the outbound vectors are unchanged
+(no new commands). Companion tests: `companion/test/subagents.test.ts`.
+
 Test data for rev 1.3: `clip_quiet_c2`, `shot_c2`, `unstage_c2`, `send_images_only_c2`, `hello_img_c2`
 (`protocol/vectors`) and `clip-quiet`, `shot`, `unstage`, `send-images-only`, `hello-img`
 (`companion/test/vectors`).
@@ -46,7 +59,7 @@ first, then the code.
   screen for a few frames. The companion reads it with Windows.Graphics.Capture, which only reads.
 
 Test data:
-- `protocol/fixtures/live.sample.lua`: a full snapshot (6 threads, a focused thread with 40 messages and a pending approval).
+- `protocol/fixtures/live.sample.lua`: a full snapshot (7 threads, 5 subagent rows, a focused thread with 40 messages, 2 subagents and a pending approval).
 - `protocol/vectors/*.json` (+ `.png`): outbound frames, from bytes to cells to pixels.
   `scripts/dev/gen-vectors.js --check` recomputes every vector with its own JavaScript CRC32 and
   bit packing, separate from the Lua encoder.
@@ -76,6 +89,9 @@ The brief's formats are kept. Everything below is an addition or a clarification
 | D15 | **Open threads** (Phase 2). `threads` = every open thread, at most **30** (was 12): not settled in T3 (`settledAt` null; T3's `thread.settle` / `thread.auto-settle` set it, `thread.unsettle` clears it), not archived or deleted, not a subagent. Order: needs you, running, then the rest by most recent update. The focused thread is always included, even when settled. The addon lists every thread in the tracker until it is settled. No 30-minute rule, and opening a row never hides it. Rows can be collapsed per thread (addon-only state, stored as thread ids in SavedVariables). | The user wants all open threads visible and to dismiss them only by settling them in T3. |
 | D16 | **Image slots and inline images** (rev 1.3). The installer creates `Interface\AddOns\T3Bridge_Img\i0001.tga … iNNNN.tga` (default 100, `-ImageSlots`), each a 512×512, 32-bit uncompressed TGA with alpha, bottom-left origin, exactly 1,048,594 bytes, fully transparent. The companion writes an image (fitted into 512×512, never upscaled) into the **top-left** of a free slot, in place, before any snapshot names it; the addon shows it with `SetTexCoord(0, w/512, 0, h/512)`. WoW caches a texture on first load, so **a slot shows one image per WoW session**: the companion burns slots per WoW process (pid + start time, `%LOCALAPPDATA%\T3Bridge\imgslots.json`); a new WoW process frees all (optionally also a new addon session, config `images.resetOnReload`, only if `/t3 spike img` shows that `/reload` frees textures). Message segment `{"img","[image: <alt>]",s=<slot or 0>,w=,h=,alt=,aid=,st=}`; top-level `imgslots={left=,total=,reset="restart"\|"reload"}`. On a clean stop (and `--clear`) every used slot is overwritten with the transparent placeholder. | Pictures in chat; the only way to get pixels into the client without creating files after start-up. |
 | D17 | **Staged attachments** (rev 1.3). Outbound `clip <tid> <quiet>` stages the Windows clipboard image (quiet `1` = Ctrl+V: say nothing if there is none), `shot <tid>` stages the newest file in `<WoW>\Screenshots` (jpg/tga/png) if it is under 15 minutes old, `unstage <tid> <aid>` removes one. `focus.staged = {{aid=, s=, w=, h=, name=}, …}` (at most 4). `send` uploads every staged image of that thread to T3 and attaches it to the message, then clears the list; with staged images the text may be empty. `hello` may carry a 5th field: `1` images work / `0` the user marked image slots as broken (`/t3 spike img fail`): the companion then writes no slots (`st="off"`). | Attaching screenshots and clipboard images from the game. |
+| D19 | **Subagent threads** (rev 1.4). T3 gives every subagent its own thread (delegated tasks and provider-native subagents such as Claude's `Agent` tool; `docs/t3-api-notes.md` §11). Thread summaries may carry `parent` (tid of the parent thread; subagents only), `kids` (number of subagent threads), `kidsRunning` (how many of them run) and `kidsNeed` (how many need you, at any depth). `threads` stays the list of open top-level threads (D15) plus, when the focused thread is a subagent, that thread and its ancestors below the root, each with `parent`, even when settled or finished. New top-level `subs` = subagent rows for the tracker and the thread menu: the children of the listed top-level threads, at most 8 per thread (needs you, running, then most recently updated) and 40 in total, each with `parent`. The addon treats every summary with `parent` as a subagent row, never as a top-level tracker row. | The user wants to open subagent threads and go back up a level. |
+| D20 | **Focus family** (rev 1.4). `focus.parent = {id=, title=}` when the focused thread is a subagent; `focus.kids` = its subagents (at most 20, needs you, running, then most recent; `{id,title,st,need,t0,t1,kids}`), `focus.nkids` = their total; `focus.path = {{id,title},...}` = breadcrumb from the root to the focused thread (last entry = `focus.id`), at most 4 entries: when deeper, the root and the last 3. Up = `focus <focus.parent.id>`. | Breadcrumb, Up button and the Subagents strip need the family of the open thread only. |
+| D21 | **Thread links** (rev 1.4). Message segment `{"tl","<label>",id="<tid>"}`: a link to another thread, e.g. T3's 'Delegated task "X" finished' line, a subagent in a tool run, or a `t3-thread://` link in assistant text (the text keeps the link's label). The addon renders it link-coloured and clickable (click = `focus <tid>`). At most 8 per message. | Clickable references to child threads in the parent's history. |
 | D18 | **Notices** (rev 1.3). `focus.notice` = short feedback for the focused thread ("No image on the clipboard"), `focus.nid` = its counter. The companion keeps it for about 6 s; the addon shows it once per `nid` in the status bar for 4 s. | Feedback for commands that succeed without doing anything. |
 
 ---
@@ -90,7 +106,8 @@ The brief's formats are kept. Everything below is an addition or a clarification
 | Addon session `asid` | 4 random bytes, written as 8 lowercase hex chars inbound. |
 | Text encoding | UTF-8 everywhere. |
 | Outbound input cap | The user's text is at most **4000 bytes** of UTF-8. The addon enforces this. |
-| Threads in snapshot | ≤ 30 (D15; was 12) |
+| Threads in snapshot | ≤ 30 (D15; was 12), plus the focused subagent and its ancestors (D19) |
+| Subagent rows `subs` | ≤ 8 per listed thread, ≤ 40 in total (D19); `focus.kids` ≤ 20, `focus.path` ≤ 4 entries (D20) |
 | Messages in snapshot | ≤ 120 (default window 40) |
 | Message body | ≤ 8000 bytes per message in the snapshot. Longer bodies are cut, with `more=true`. |
 | Snapshot size | ≤ 480 KiB of Lua before padding. Padded file = 524288 bytes. |
@@ -167,6 +184,7 @@ T3B_IN_END=4812
 | `asid` | string | yes* | The addon session `ack` refers to. 8 hex chars, or `""` before any frame has arrived. *Old writers may leave it out; the addon then takes no acks. |
 | `err` | table/nil | no | `{seq=<addon seq>, text="<short human message>"}` for the most recent failed command from `asid`. Stays until a later command succeeds or fails. |
 | `threads` | array | yes | ≤ 30 thread summaries of the user's open (unsettled) threads (D15), ordered: needs you (approval/input), running, then most recently updated. Never settled, archived, deleted or subagent threads, except that the focused thread is always included. Summaries only: message text appears only under `focus`, for the focused thread. |
+| `subs` | array/nil | no | rev 1.4 (D19): subagent rows (thread summaries with `parent`), at most 8 per listed thread and 40 in total. |
 | `focus` | table/nil | no | Detail for the thread named by the last `focus` command, or `nil`. |
 | `imgslots` | table/nil | no | rev 1.3 (D16): `{left=<free slots>, total=<installed slots>, reset="restart"\|"reload"}`. `total=0`: no image slots (images show as text). The addon shows "Images: N left" when fewer than 20 are left. |
 
@@ -182,6 +200,10 @@ T3B_IN_END=4812
 | `t1` | int/nil | End of the latest run (nil while running). |
 | `model` | string/nil | Model display name. |
 | `proj` | string/nil | Project name. |
+| `parent` | string/nil | rev 1.4 (D19): tid of the parent thread. Only subagent threads have it. |
+| `kids` | int/nil | rev 1.4: number of subagent threads (direct children). Absent = none (or not known yet). |
+| `kidsRunning` | int/nil | rev 1.4: how many of the subagents run (and do not need you). |
+| `kidsNeed` | int/nil | rev 1.4: how many of the subagents need you (approval/input, at any depth). The tracker expands that row's subagent list by itself. |
 
 How the addon shows a thread: `need ~= nil` → "needs you" (orange, pulsing). Otherwise it follows `st`.
 Phase 2 (D15): every listed thread has a tracker row, `idle` included, until the thread is settled in T3
@@ -201,6 +223,9 @@ setting) are compact and sorted after the expanded ones. They expand again when 
 | `older` | bool/nil | Optional (D11). `true` = older messages exist before `msgs[1]` (send `hist` to get them); `false` = `msgs[1]` is the thread's oldest shown message. Absent: the addon guesses from `msgs[1].i > 1`. |
 | `staged` | array/nil | rev 1.3 (D17): images attached to the next `send` for this thread, at most 4: `{aid="k1", s=<slot or 0>, w=, h=, name="clip-1.png"}`. |
 | `notice` / `nid` | string/int, nil | rev 1.3 (D18): short feedback and its counter. |
+| `parent` | table/nil | rev 1.4 (D20): `{id=, title=}` of the parent when the focused thread is a subagent. |
+| `kids` / `nkids` | array/int, nil | rev 1.4 (D20): the focused thread's subagents `{id,title,st,need,t0,t1,kids}` (at most 20) and their total. |
+| `path` | array/nil | rev 1.4 (D20): breadcrumb `{{id,title},...}` from the root to the focused thread (last = `id`), at most 4 entries. Sent when the focused thread is a subagent. |
 | `msgs` | array | Oldest first, ≤ 120. |
 
 #### Message
@@ -210,7 +235,7 @@ setting) are compact and sorted after the expanded ones. They expand again when 
 | `i` | int | Message index in the thread, starting at 1. Never reused. A message whose body changes (streaming) keeps its `i`. |
 | `r` | string | Role: `u` user, `a` assistant, `t` tool, `s` system. |
 | `ts` | int | Creation time. |
-| `segs` | array | Ordered segments `{kind, text}`. `kind` `"p"` = text paragraph(s), `"c"` = code block (the text carries no backtick fences). Unknown kinds render as `"p"`. In `u`/`a` messages, `p` text may carry the D14 marks: `**bold**`, `` `code` ``, `# heading` lines, `- ` / `1. ` list items (2 spaces per nesting level). Rev 1.3 (D16): `{"img","[image: <alt>]",s=,w=,h=,alt=,aid=,st=}` = an image (`s` slot 1..N, `w`/`h` its size in the slot ≤ 512; `s=0` with `st` = `load` (being prepared), `full` (no slots left), `off` (images unavailable), `err` (could not load), `old` (outside the newest 40 messages)). A message may consist of image segments only. |
+| `segs` | array | Ordered segments `{kind, text}`. `kind` `"p"` = text paragraph(s), `"c"` = code block (the text carries no backtick fences). Unknown kinds render as `"p"`. In `u`/`a` messages, `p` text may carry the D14 marks: `**bold**`, `` `code` ``, `# heading` lines, `- ` / `1. ` list items (2 spaces per nesting level). Rev 1.3 (D16): `{"img","[image: <alt>]",s=,w=,h=,alt=,aid=,st=}` = an image (`s` slot 1..N, `w`/`h` its size in the slot ≤ 512; `s=0` with `st` = `load` (being prepared), `full` (no slots left), `off` (images unavailable), `err` (could not load), `old` (outside the newest 40 messages)). A message may consist of image segments only. Rev 1.4 (D21): `{"tl","<label>",id="<tid>"}` = a link to thread `tid` (clickable; a 1.3 addon shows the label as text). |
 | `more` | bool | `true` = the companion cut this message to the size limit. The addon shows "(truncated — full text in T3 Code)". |
 
 ### 2.3 Writing rules (companion)
@@ -284,7 +309,7 @@ UTF-8. Fields are separated by a single TAB (`0x09`). No trailing newline. The *
 | Command | Fields | Meaning |
 |---------|--------|---------|
 | `hello` | `[proto] [addonVersion] [cell] [rows] [img]` | Sent once per addon session, at the first fresh snapshot whose `asid` is not ours. `img` (rev 1.3): `1`/`0` image slots work / were marked broken. |
-| `focus` | `<tid>` | Make `tid` the focused thread (§2.6). |
+| `focus` | `<tid>` | Make `tid` the focused thread (§2.6). Rev 1.4: also a subagent's tid (from `subs`, `focus.kids`, `focus.path` or a `tl` segment). |
 | `send` | `<tid> <clientMsgId> <text>` | Send a user message. `clientMsgId` = `<asid>-<seq>`, the idempotency key. Rev 1.3: the staged images of `tid` go with it, and `text` may then be empty. |
 | `model` | `<tid> <modelId> [effort]` | Change the thread's model; the optional 3rd argument also sets its reasoning effort (D14). The effort-only picker sends the current model id with the new effort. |
 | `intr` | `<tid>` | Stop or interrupt the running turn. |

@@ -39,6 +39,9 @@ Each poll uses one slot addon. Click the message or type `/reload`. For longer s
 **The window shows "Loading thread…" for a long time**
 The companion fetches the thread when you open it (usually under a second). If it stays, check the log for T3 errors; the addon asks again every 10 s.
 
+**Subagents are missing, or the Subagents bar and the tracker badge do not show**
+The companion lists subagents after it has fetched the thread's family (`getThreadFamily`; under a second, once per thread). A companion older than protocol rev 1.4 never sends them; restart the bridge after updating. Only the 8 most relevant subagents of each tracker row are listed; the Subagents bar of the open thread lists up to 20, and "N more..." opens the thread menu. Finished native subagents (Claude's Agent tool) show as completed: T3 keeps them idle and only the parent knows if one failed, so open the parent to see the exact state.
+
 **A new icon or texture does not show**
 WoW caches textures. Restart the game completely; `/reload` is not enough.
 
