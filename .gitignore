@@ -1,0 +1,38 @@
+# Build output
+node_modules/
+dist/
+bin/
+obj/
+*.tsbuildinfo
+__pycache__/
+*.pyc
+.vitest*/
+companion/test-results/
+
+# Logs and local runtime data (never commit these)
+*.log
+config.json
+bearer.dat
+auth-meta.json
+companion.lock
+stop.request
+# Generated slot addons and the runtime live.lua / spike.lua (scripts/install-addon.ps1 creates them
+# in the WoW folder). Do not add bare "live.lua"/"spike.lua" patterns: git on Windows ignores case,
+# and "spike.lua" would hide addon/T3Bridge/Spike.lua.
+T3Bridge_S[0-9][0-9][0-9][0-9]/
+T3Bridge_T[AB][0-9][0-9]/
+T3Bridge_Live/
+
+# Full, unmasked screenshots stay outside the repo (art/make_screenshots.py publishes masked crops)
+screenshots-raw/
+WoWScrnShot_*
+
+# Editors and OS
+.vs/
+.vscode/
+.idea/
+*.suo
+*.user
+Thumbs.db
+Desktop.ini
+.DS_Store

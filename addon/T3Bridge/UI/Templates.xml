@@ -1,0 +1,12 @@
+<Ui xmlns="http://www.blizzard.com/wow/ui/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <!-- Input box: Blizzard's InputScrollFrameTemplate with its OnLoad keys set before OnLoad runs.
+       If this client lacks InputScrollFrameTemplate, the chat window detects that (no .EditBox)
+       and builds a plain ScrollFrame + EditBox instead. -->
+  <ScrollFrame name="T3BridgeInputScrollTemplate" inherits="InputScrollFrameTemplate" virtual="true">
+    <KeyValues>
+      <KeyValue key="maxLetters" value="0" type="number"/>
+      <KeyValue key="instructions" value="Message T3 Code - Enter sends, Shift+Enter adds a line" type="string"/>
+      <KeyValue key="hideCharCount" value="true" type="boolean"/>
+    </KeyValues>
+  </ScrollFrame>
+</Ui>

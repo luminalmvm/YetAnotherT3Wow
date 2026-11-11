@@ -1,0 +1,184 @@
+{
+ "_note": "GET /api/orchestration/shell?omitOlderSettled=1&omitIdleSubagents=1 (header x-t3-orchestration-protocol: 2). Real threads replaced by one throwaway test thread. VERIFIED shape.",
+ "data": {
+  "schemaVersion": 2,
+  "snapshotSequence": 1670000,
+  "threads": [
+   {
+    "createdBy": "user",
+    "creationSource": "web",
+    "id": "00000000-0000-4000-8000-000000000001",
+    "projectId": "00000000-0000-4000-8000-000000000002",
+    "title": "<title>",
+    "providerInstanceId": "claudeAgent",
+    "modelSelection": {
+     "instanceId": "claudeAgent",
+     "model": "claude-opus-5-5",
+     "options": [
+      {
+       "id": "effort",
+       "value": "high"
+      },
+      {
+       "id": "fastMode",
+       "value": false
+      }
+     ]
+    },
+    "runtimeMode": "full-access",
+    "interactionMode": "default",
+    "branch": null,
+    "worktreePath": null,
+    "pullRequests": [],
+    "lineage": {
+     "parentThreadId": null,
+     "relationshipToParent": null,
+     "rootThreadId": "00000000-0000-4000-8000-000000000001"
+    },
+    "forkedFrom": null,
+    "activeProviderThreadId": "00000000-0000-4000-8000-000000000003",
+    "latestRunId": "00000000-0000-4000-8000-000000000004",
+    "latestRunRequestedAt": "2025-12-11T19:56:27.881Z",
+    "latestRunStartedAt": "2025-12-11T19:56:31.775Z",
+    "latestRunCompletedAt": "2025-12-11T19:58:02.311Z",
+    "latestRunStopRequested": false,
+    "activeRunId": null,
+    "activityRunStartedAt": null,
+    "activityRunStatus": null,
+    "blockedOnThreadWait": false,
+    "status": "completed",
+    "lastError": null,
+    "lastErrorClass": null,
+    "lastErrorCode": null,
+    "usageLimitResetAt": null,
+    "pendingRuntimeRequest": null,
+    "pendingGuestMessageCount": 0,
+    "latestVisibleMessage": null,
+    "latestUserMessageAt": "2025-12-11T19:56:27.881Z",
+    "latestUserAuthoredMessageAt": "2025-12-11T19:14:01.126Z",
+    "hasActionableProposedPlan": false,
+    "pendingBackgroundTasks": [],
+    "providerInstanceHistory": [
+     "claudeAgent"
+    ],
+    "goal": null,
+    "itemCount": 67,
+    "visibleItemCount": 67,
+    "createdAt": "2025-12-11T18:40:04.530Z",
+    "updatedAt": "2025-12-11T20:28:02.301Z",
+    "archivedAt": null,
+    "settledOverride": null,
+    "settledAt": null,
+    "unsettledAt": null,
+    "snoozedUntil": null,
+    "snoozedAt": null,
+    "limitRecovery": null,
+    "pinnedAt": null,
+    "autoSettleDisabledAt": null,
+    "pinOrderKey": null,
+    "activeOrderKey": "tn",
+    "lastVisitedAt": "2025-12-11T20:28:02.301Z",
+    "opens": {
+     "openedAt": 1794256284398,
+     "score": 1.9909632372759134,
+     "picks": []
+    },
+    "titleRegeneration": null,
+    "deletedAt": null
+   }
+  ],
+  "archivedThreads": [],
+  "projects": [
+   {
+    "id": "00000000-0000-4000-8000-000000000000",
+    "title": "No project",
+    "workspaceRoot": "C:\\Users\\<user>\\.t3\\scratch",
+    "repositoryIdentity": null,
+    "defaultModelSelection": null,
+    "defaultThreadEnvMode": null,
+    "autoPull": false,
+    "faviconPath": null,
+    "projectIcon": {
+     "kind": "lucide",
+     "name": "message-square-dashed",
+     "color": "gray"
+    },
+    "scripts": [],
+    "pinnedAt": null,
+    "archivedAt": null,
+    "createdAt": "2025-11-27T18:54:31.200Z",
+    "updatedAt": "2025-11-27T18:54:31.205Z"
+   },
+   {
+    "id": "00000000-0000-4000-8000-000000000001",
+    "title": "Project A",
+    "workspaceRoot": "C:\\Users\\<user>\\projects\\project-1",
+    "repositoryIdentity": null,
+    "defaultModelSelection": null,
+    "defaultThreadEnvMode": null,
+    "autoPull": false,
+    "faviconPath": null,
+    "projectIcon": {
+     "kind": "lucide",
+     "name": "terminal",
+     "color": "cyan"
+    },
+    "scripts": [],
+    "pinnedAt": null,
+    "archivedAt": null,
+    "createdAt": "2025-11-27T19:39:57.260Z",
+    "updatedAt": "2025-12-01T12:09:48.717Z"
+   },
+   {
+    "id": "00000000-0000-4000-8000-000000000002",
+    "title": "Project B",
+    "workspaceRoot": "C:\\Users\\<user>\\projects\\project-2",
+    "repositoryIdentity": null,
+    "defaultModelSelection": null,
+    "defaultThreadEnvMode": null,
+    "autoPull": false,
+    "faviconPath": null,
+    "projectIcon": null,
+    "scripts": [],
+    "pinnedAt": null,
+    "archivedAt": null,
+    "createdAt": "2025-12-20T09:27:56.351Z",
+    "updatedAt": "2025-12-20T09:27:56.351Z"
+   },
+   {
+    "id": "00000000-0000-4000-8000-000000000003",
+    "title": "Project C",
+    "workspaceRoot": "C:\\Users\\<user>\\projects\\project-3",
+    "repositoryIdentity": null,
+    "defaultModelSelection": null,
+    "defaultThreadEnvMode": null,
+    "autoPull": false,
+    "faviconPath": null,
+    "projectIcon": null,
+    "scripts": [],
+    "pinnedAt": null,
+    "archivedAt": null,
+    "createdAt": "2025-12-22T09:30:50.524Z",
+    "updatedAt": "2025-12-22T09:30:50.524Z"
+   }
+  ],
+  "olderSettled": {
+   "before": "2025-12-29T21:29:51.689Z",
+   "asOfSequence": 1670938,
+   "counts": [
+    {
+     "projectId": "fa4e000a-0000-4000-8000-00000000000a",
+     "count": 309
+    },
+    {
+     "projectId": "fa4e0007-0000-4000-8000-000000000007",
+     "count": 5
+    },
+    {
+     "projectId": "fa4e000b-0000-4000-8000-00000000000b",
+     "count": 2
+    }
+   ]
+  }
+ }
+}

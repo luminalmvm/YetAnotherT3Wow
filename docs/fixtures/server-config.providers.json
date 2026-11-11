@@ -1,0 +1,414 @@
+{
+ "_note": "WS RPC server.getConfig -> providers[].models[] (selectable models per provider instance). VERIFIED. Other config sections omitted.",
+ "data": {
+  "topLevelKeys": [
+   "environment",
+   "auth",
+   "cwd",
+   "keybindingsConfigPath",
+   "keybindings",
+   "issues",
+   "providers",
+   "availableEditors",
+   "remoteOpenTargets",
+   "directEndpoints",
+   "observability",
+   "settings",
+   "shellResumeCompletionMarker",
+   "shellThreadFamilies",
+   "threadLinkMetadata",
+   "shellOlderSettled",
+   "shellRevealInFileManager",
+   "shellRevealInFileManagerKind",
+   "threadResumeCompletionMarker",
+   "threadSnapshotPagination",
+   "threadFind",
+   "threadFindProgressive",
+   "secretProviderSettings",
+   "secretReferences",
+   "secretRequestReferences",
+   "scratchWorkspaceRoot",
+   "newProjectsRoot"
+  ],
+  "providers": [
+   {
+    "instanceId": "codex",
+    "driver": "codex",
+    "displayName": "Codex",
+    "enabled": false,
+    "status": "disabled",
+    "models": []
+   },
+   {
+    "instanceId": "claudeAgent_2",
+    "driver": "claudeAgent",
+    "displayName": "Claude",
+    "enabled": true,
+    "status": "ready",
+    "models": [
+     {
+      "slug": "claude-opus-5-5",
+      "name": "Claude Opus 5.5",
+      "aliases": [
+       "opus",
+       "opus-5.5",
+       "claude-opus-5.5"
+      ],
+      "isDefault": true,
+      "capabilities": {
+       "optionDescriptors": [
+        {
+         "id": "effort",
+         "label": "Reasoning",
+         "type": "select",
+         "options": [
+          {
+           "id": "low",
+           "label": "Low"
+          },
+          {
+           "id": "medium",
+           "label": "Medium",
+           "isDefault": true
+          },
+          {
+           "id": "high",
+           "label": "High"
+          },
+          {
+           "id": "xhigh",
+           "label": "Extra High"
+          },
+          {
+           "id": "max",
+           "label": "Max"
+          },
+          {
+           "id": "ultrathink",
+           "label": "Ultrathink"
+          }
+         ],
+         "promptInjectedValues": [
+          "ultrathink"
+         ]
+        },
+        {
+         "id": "ultracode",
+         "label": "Ultracode",
+         "type": "boolean"
+        },
+        {
+         "id": "fastMode",
+         "label": "Fast Mode",
+         "type": "boolean"
+        }
+       ]
+      }
+     },
+     {
+      "slug": "claude-sonnet-5-5",
+      "name": "Claude Sonnet 5.5"
+     },
+     {
+      "slug": "claude-fable-5-2",
+      "name": "Claude Fable 5.2"
+     },
+     {
+      "slug": "claude-fable-5-1",
+      "name": "Claude Fable 5.1"
+     },
+     {
+      "slug": "claude-fable-5",
+      "name": "Claude Fable 5"
+     },
+     {
+      "slug": "claude-opus-5",
+      "name": "Claude Opus 5"
+     },
+     {
+      "slug": "claude-opus-4-8",
+      "name": "Claude Opus 4.8"
+     },
+     {
+      "slug": "claude-opus-4-7",
+      "name": "Claude Opus 4.7"
+     },
+     {
+      "slug": "claude-opus-4-6",
+      "name": "Claude Opus 4.6"
+     },
+     {
+      "slug": "claude-opus-4-5",
+      "name": "Claude Opus 4.5"
+     },
+     {
+      "slug": "claude-sonnet-5",
+      "name": "Claude Sonnet 5"
+     },
+     {
+      "slug": "claude-sonnet-4-6",
+      "name": "Claude Sonnet 4.6"
+     },
+     {
+      "slug": "claude-haiku-5-5",
+      "name": "Claude Haiku 5.5"
+     },
+     {
+      "slug": "claude-haiku-4-5",
+      "name": "Claude Haiku 4.5"
+     }
+    ]
+   },
+   {
+    "instanceId": "claudeAgent",
+    "driver": "claudeAgent",
+    "displayName": "Claude (Old)",
+    "enabled": true,
+    "status": "ready",
+    "models": [
+     {
+      "slug": "claude-opus-5-5",
+      "name": "Claude Opus 5.5",
+      "aliases": [
+       "opus",
+       "opus-5.5",
+       "claude-opus-5.5"
+      ],
+      "isDefault": true,
+      "capabilities": {
+       "optionDescriptors": [
+        {
+         "id": "effort",
+         "label": "Reasoning",
+         "type": "select",
+         "options": [
+          {
+           "id": "low",
+           "label": "Low"
+          },
+          {
+           "id": "medium",
+           "label": "Medium",
+           "isDefault": true
+          },
+          {
+           "id": "high",
+           "label": "High"
+          },
+          {
+           "id": "xhigh",
+           "label": "Extra High"
+          },
+          {
+           "id": "max",
+           "label": "Max"
+          },
+          {
+           "id": "ultrathink",
+           "label": "Ultrathink"
+          }
+         ],
+         "promptInjectedValues": [
+          "ultrathink"
+         ]
+        },
+        {
+         "id": "ultracode",
+         "label": "Ultracode",
+         "type": "boolean"
+        },
+        {
+         "id": "fastMode",
+         "label": "Fast Mode",
+         "type": "boolean"
+        }
+       ]
+      }
+     },
+     {
+      "slug": "claude-sonnet-5-5",
+      "name": "Claude Sonnet 5.5"
+     },
+     {
+      "slug": "claude-fable-5-2",
+      "name": "Claude Fable 5.2"
+     },
+     {
+      "slug": "claude-fable-5-1",
+      "name": "Claude Fable 5.1"
+     },
+     {
+      "slug": "claude-fable-5",
+      "name": "Claude Fable 5"
+     },
+     {
+      "slug": "claude-opus-5",
+      "name": "Claude Opus 5"
+     },
+     {
+      "slug": "claude-opus-4-8",
+      "name": "Claude Opus 4.8"
+     },
+     {
+      "slug": "claude-opus-4-7",
+      "name": "Claude Opus 4.7"
+     },
+     {
+      "slug": "claude-opus-4-6",
+      "name": "Claude Opus 4.6"
+     },
+     {
+      "slug": "claude-opus-4-5",
+      "name": "Claude Opus 4.5"
+     },
+     {
+      "slug": "claude-sonnet-5",
+      "name": "Claude Sonnet 5"
+     },
+     {
+      "slug": "claude-sonnet-4-6",
+      "name": "Claude Sonnet 4.6"
+     },
+     {
+      "slug": "claude-haiku-5-5",
+      "name": "Claude Haiku 5.5"
+     },
+     {
+      "slug": "claude-haiku-4-5",
+      "name": "Claude Haiku 4.5"
+     }
+    ]
+   },
+   {
+    "instanceId": "cursor",
+    "driver": "cursor",
+    "displayName": "Cursor",
+    "enabled": false,
+    "status": "disabled",
+    "models": []
+   },
+   {
+    "instanceId": "grok",
+    "driver": "grok",
+    "displayName": "Grok",
+    "enabled": false,
+    "status": "disabled",
+    "models": [
+     {
+      "slug": "grok-build",
+      "name": "Grok Build",
+      "capabilities": {
+       "optionDescriptors": []
+      }
+     }
+    ]
+   },
+   {
+    "instanceId": "opencode",
+    "driver": "opencode",
+    "displayName": "OpenCode",
+    "enabled": false,
+    "status": "disabled",
+    "models": []
+   },
+   {
+    "instanceId": "antigravity",
+    "driver": "antigravity",
+    "displayName": "Antigravity",
+    "enabled": false,
+    "status": "disabled",
+    "models": []
+   },
+   {
+    "instanceId": "fx",
+    "driver": "fx",
+    "displayName": "Custom",
+    "enabled": false,
+    "status": "disabled",
+    "models": [
+     {
+      "slug": "default",
+      "name": "Default",
+      "isDefault": true,
+      "capabilities": {
+       "optionDescriptors": [
+        {
+         "id": "effort",
+         "label": "Effort",
+         "type": "select",
+         "options": [
+          {
+           "id": "auto",
+           "label": "Auto"
+          },
+          {
+           "id": "low",
+           "label": "Low"
+          },
+          {
+           "id": "medium",
+           "label": "Medium",
+           "isDefault": true
+          },
+          {
+           "id": "high",
+           "label": "High"
+          },
+          {
+           "id": "xhigh",
+           "label": "Extra High"
+          },
+          {
+           "id": "max",
+           "label": "Max"
+          }
+         ]
+        }
+       ]
+      }
+     }
+    ]
+   },
+   {
+    "instanceId": "kiro",
+    "driver": "kiro",
+    "displayName": "Kiro",
+    "enabled": false,
+    "status": "disabled",
+    "models": [
+     {
+      "slug": "default",
+      "name": "Kiro default",
+      "capabilities": {
+       "optionDescriptors": []
+      }
+     }
+    ]
+   },
+   {
+    "instanceId": "muse",
+    "driver": "muse",
+    "displayName": "Muse Code",
+    "enabled": false,
+    "status": "disabled",
+    "models": []
+   },
+   {
+    "instanceId": "pi",
+    "driver": "pi",
+    "displayName": "Pi",
+    "enabled": false,
+    "status": "disabled",
+    "models": [
+     {
+      "slug": "default",
+      "name": "Pi default",
+      "capabilities": {
+       "optionDescriptors": []
+      }
+     }
+    ]
+   }
+  ]
+ }
+}

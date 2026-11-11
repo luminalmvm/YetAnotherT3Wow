@@ -1,0 +1,21 @@
+{
+  "name": "t3bridge-companion",
+  "version": "0.1.0",
+  "private": true,
+  "description": "T3Bridge companion: bridges T3 Code threads to the T3Bridge WoW addon (live.lua inbound, screen-matrix outbound).",
+  "type": "module",
+  "engines": { "node": ">=22" },
+  "main": "dist/main.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "demo": "node dist/main.js --demo",
+    "selftest": "node dist/main.js --selftest",
+    "start": "node dist/main.js"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.5",
+    "typescript": "5.9.3",
+    "vitest": "3.2.7"
+  }
+}

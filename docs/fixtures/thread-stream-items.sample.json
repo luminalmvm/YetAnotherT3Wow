@@ -1,0 +1,227 @@
+{
+ "_note": "WS stream orchestration.subscribeThread {threadId, acceptBoundedSnapshot:true}. VERIFIED.",
+ "data": {
+  "firstItemKind": "snapshot",
+  "snapshotKeys": [
+   "kind",
+   "snapshotSequence",
+   "projection",
+   "historyCursor",
+   "hasMoreHistory",
+   "latestLocalTurnOrdinal"
+  ],
+  "eventTypesSeen": [
+   "turn-item.updated",
+   "checkpoint-scope.created",
+   "node.updated",
+   "run.updated",
+   "provider-session.attached",
+   "provider-session.updated",
+   "provider-thread.updated",
+   "run-attempt.updated",
+   "provider-turn.updated",
+   "message.updated",
+   "checkpoint.captured"
+  ],
+  "examples": [
+   {
+    "kind": "event",
+    "sequence": 1685261,
+    "event": {
+     "id": "event:thread:fa4e0006-0000-4000-8000-000000000006:command:fa4e000e-0000-4000-8000-00000000000e%3Arelease:fa4e000f-0000-4000-8000-00000000000f",
+     "threadId": "fa4e0006-0000-4000-8000-000000000006",
+     "runId": "run:thread:fa4e0006-0000-4000-8000-000000000006:ordinal:1",
+     "nodeId": "node:run:run%3Athread%3Afa4e0006-0000-4000-8000-000000000006%3Aordinal%3A1:root",
+     "providerInstanceId": "claudeAgent_2",
+     "occurredAt": "2026-01-01T13:33:42.386Z",
+     "type": "run.updated",
+     "payload": {
+      "id": "run:thread:fa4e0006-0000-4000-8000-000000000006:ordinal:1",
+      "threadId": "fa4e0006-0000-4000-8000-000000000006",
+      "ordinal": 1,
+      "providerInstanceId": "claudeAgent_2",
+      "modelSelection": {
+       "instanceId": "claudeAgent_2",
+       "model": "claude-haiku-4-5"
+      },
+      "providerThreadId": "provider-thread:provider:claudeAgent:native-thread:pending%3Arun%3Athread%3Afa4e0006-0000-4000-8000-000000000006%3Aordinal%3A1",
+      "userMessageId": "fa4e0008-0000-4000-8000-000000000008",
+      "rootNodeId": "node:run:run%3Athread%3Afa4e0006-0000-4000-8000-000000000006%3Aordinal%3A1:root",
+      "activeAttemptId": "run-attempt:run:run%3Athread%3Afa4e0006-0000-4000-8000-000000000006%3Aordinal%3A1:attempt:1",
+      "status": "starting",
+      "queuePosition": null,
+      "requestedAt": "2026-01-01T13:33:42.358Z",
+      "startedAt": null,
+      "completedAt": null,
+      "checkpointId": null,
+      "contextHandoffId": null,
+      "workspacePreparation": {
+       "type": "existing_worktree",
+       "worktreePath": "C:\\Users\\<user>\\.t3\\scratch\\2026-01-01-fixture-test-reply-with-a-00000006"
+      }
+     }
+    }
+   },
+   {
+    "kind": "event",
+    "sequence": 1685257,
+    "event": {
+     "id": "event:thread:fa4e0006-0000-4000-8000-000000000006:command:fa4e000e-0000-4000-8000-00000000000e%3Aprogress%3Asetup:fa4e0010-0000-4000-8000-000000000010",
+     "threadId": "fa4e0006-0000-4000-8000-000000000006",
+     "runId": "run:thread:fa4e0006-0000-4000-8000-000000000006:ordinal:1",
+     "nodeId": "node:run:run%3Athread%3Afa4e0006-0000-4000-8000-000000000006%3Aordinal%3A1:root",
+     "providerInstanceId": "claudeAgent_2",
+     "occurredAt": "2026-01-01T13:33:42.380Z",
+     "type": "turn-item.updated",
+     "payload": {
+      "id": "turn-item:provider:claudeAgent:native-item:workspace-preparation%3Arun%3Athread%3Afa4e0006-0000-4000-8000-000000000006%3Aordinal%3A1",
+      "threadId": "fa4e0006-0000-4000-8000-000000000006",
+      "runId": "run:thread:fa4e0006-0000-4000-8000-000000000006:ordinal:1",
+      "nodeId": "node:run:run%3Athread%3Afa4e0006-0000-4000-8000-000000000006%3Aordinal%3A1:root",
+      "providerThreadId": "provider-thread:provider:claudeAgent:native-thread:pending%3Arun%3Athread%3Afa4e0006-0000-4000-8000-000000000006%3Aordinal%3A1",
+      "providerTurnId": null,
+      "nativeItemRef": null,
+      "parentItemId": null,
+      "ordinal": 1000002,
+      "status": "running",
+      "title": "Starting setup script",
+      "startedAt": "2026-01-01T13:33:42.358Z",
+      "completedAt": null,
+      "updatedAt": "2026-01-01T13:33:42.380Z",
+      "type": "command_execution",
+      "input": "Preparing workspace"
+     }
+    }
+   },
+   {
+    "kind": "event",
+    "sequence": 1685286,
+    "event": {
+     "id": "event:thread:fa4e0006-0000-4000-8000-000000000006:provider-session:provider-session%3Aprovider-instance%3AclaudeAgent_2%3Athread%3Afa4e0006-0000-4000-8000-000000000006%3Afa4e0009-0000-4000-8000-000000000009:fa4e0011-0000-4000-8000-000000000011",
+     "threadId": "fa4e0006-0000-4000-8000-000000000006",
+     "runId": "run:thread:fa4e0006-0000-4000-8000-000000000006:ordinal:1",
+     "nodeId": "node:provider:claudeAgent:native-item:fa4e000d-0000-4000-8000-00000000000d",
+     "driver": "claudeAgent",
+     "providerInstanceId": "claudeAgent_2",
+     "occurredAt": "2026-01-01T13:33:45.287Z",
+     "type": "turn-item.updated",
+     "payload": {
+      "id": "turn-item:provider:claudeAgent:native-item:fa4e000d-0000-4000-8000-00000000000d",
+      "threadId": "fa4e0006-0000-4000-8000-000000000006",
+      "runId": "run:thread:fa4e0006-0000-4000-8000-000000000006:ordinal:1",
+      "nodeId": "node:provider:claudeAgent:native-item:fa4e000d-0000-4000-8000-00000000000d",
+      "providerThreadId": "provider-thread:provider:claudeAgent:native-thread:pending%3Arun%3Athread%3Afa4e0006-0000-4000-8000-000000000006%3Aordinal%3A1",
+      "providerTurnId": "provider-turn:provider:claudeAgent:native-turn:turn%3Arun-attempt%3Arun%3Arun%253Athread%253Afa4e0006-0000-4000-8000-000000000006%253Aordinal%253A1%3Aattempt%3A1",
+      "nativeItemRef": {
+       "driver": "claudeAgent",
+       "nativeId": "fa4e000d-0000-4000-8000-00000000000d",
+       "strength": "strong"
+      },
+      "parentItemId": null,
+      "ordinal": 1000004,
+      "status": "completed",
+      "title": null,
+      "startedAt": "2026-01-01T13:33:45.284Z",
+      "completedAt": "2026-01-01T13:33:45.284Z",
+      "updatedAt": "2026-01-01T13:33:45.284Z",
+      "type": "assistant_message",
+      "messageId": "message:provider:claudeAgent:native-item:fa4e000d-0000-4000-8000-00000000000d",
+      "text": "- Apple\n- Banana\n\n```python\nprint(1)\n```",
+      "streaming": false
+     }
+    }
+   },
+   {
+    "kind": "event",
+    "sequence": 1685296,
+    "event": {
+     "id": "event:thread:fa4e0006-0000-4000-8000-000000000006:command:command%3Aeffect%3Acheckpoint.capture%3Arun%3Athread%3Afa4e0006-0000-4000-8000-000000000006%3Aordinal%3A1:fa4e0012-0000-4000-8000-000000000012",
+     "threadId": "fa4e0006-0000-4000-8000-000000000006",
+     "runId": "run:thread:fa4e0006-0000-4000-8000-000000000006:ordinal:1",
+     "nodeId": "node:run:run%3Athread%3Afa4e0006-0000-4000-8000-000000000006%3Aordinal%3A1:root",
+     "driver": "claudeAgent",
+     "providerInstanceId": "claudeAgent_2",
+     "occurredAt": "2026-01-01T13:33:45.328Z",
+     "type": "turn-item.updated",
+     "payload": {
+      "id": "turn-item:provider:claudeAgent:native-item:checkpoint%3Acheckpoint%3Ascope%3Acheckpoint-scope%253Athread%253Afa4e0006-0000-4000-8000-000000000006%253Aname%253Aroot%3Aname%3A1",
+      "threadId": "fa4e0006-0000-4000-8000-000000000006",
+      "runId": "run:thread:fa4e0006-0000-4000-8000-000000000006:ordinal:1",
+      "nodeId": "node:run:run%3Athread%3Afa4e0006-0000-4000-8000-000000000006%3Aordinal%3A1:root",
+      "providerThreadId": "provider-thread:provider:claudeAgent:native-thread:pending%3Arun%3Athread%3Afa4e0006-0000-4000-8000-000000000006%3Aordinal%3A1",
+      "providerTurnId": null,
+      "nativeItemRef": null,
+      "parentItemId": null,
+      "ordinal": 1000005,
+      "status": "completed",
+      "title": null,
+      "startedAt": "2026-01-01T13:33:45.328Z",
+      "completedAt": "2026-01-01T13:33:45.328Z",
+      "updatedAt": "2026-01-01T13:33:45.328Z",
+      "type": "checkpoint",
+      "checkpointId": "checkpoint:scope:checkpoint-scope%3Athread%3Afa4e0006-0000-4000-8000-000000000006%3Aname%3Aroot:name:1",
+      "scopeId": "checkpoint-scope:thread:fa4e0006-0000-4000-8000-000000000006:name:root",
+      "files": []
+     }
+    }
+   },
+   {
+    "kind": "event",
+    "sequence": 1685285,
+    "event": {
+     "id": "event:thread:fa4e0006-0000-4000-8000-000000000006:provider-session:provider-session%3Aprovider-instance%3AclaudeAgent_2%3Athread%3Afa4e0006-0000-4000-8000-000000000006%3Afa4e0009-0000-4000-8000-000000000009:fa4e0013-0000-4000-8000-000000000013",
+     "threadId": "fa4e0006-0000-4000-8000-000000000006",
+     "runId": "run:thread:fa4e0006-0000-4000-8000-000000000006:ordinal:1",
+     "nodeId": "node:provider:claudeAgent:native-item:fa4e000d-0000-4000-8000-00000000000d",
+     "driver": "claudeAgent",
+     "providerInstanceId": "claudeAgent_2",
+     "occurredAt": "2026-01-01T13:33:45.286Z",
+     "type": "message.updated",
+     "payload": {
+      "createdBy": "agent",
+      "creationSource": "provider",
+      "id": "message:provider:claudeAgent:native-item:fa4e000d-0000-4000-8000-00000000000d",
+      "threadId": "fa4e0006-0000-4000-8000-000000000006",
+      "runId": "run:thread:fa4e0006-0000-4000-8000-000000000006:ordinal:1",
+      "nodeId": "node:provider:claudeAgent:native-item:fa4e000d-0000-4000-8000-00000000000d",
+      "role": "assistant",
+      "text": "- Apple\n- Banana\n\n```python\nprint(1)\n```",
+      "attachments": [],
+      "streaming": false,
+      "createdAt": "2026-01-01T13:33:45.284Z",
+      "updatedAt": "2026-01-01T13:33:45.284Z"
+     }
+    }
+   },
+   {
+    "kind": "event",
+    "sequence": 1685268,
+    "event": {
+     "id": "event:thread:fa4e0006-0000-4000-8000-000000000006:provider-session:provider-session%3Aprovider-instance%3AclaudeAgent_2%3Athread%3Afa4e0006-0000-4000-8000-000000000006%3Afa4e0009-0000-4000-8000-000000000009:fa4e0014-0000-4000-8000-000000000014",
+     "threadId": "fa4e0006-0000-4000-8000-000000000006",
+     "runId": "run:thread:fa4e0006-0000-4000-8000-000000000006:ordinal:1",
+     "nodeId": "node:run:run%3Athread%3Afa4e0006-0000-4000-8000-000000000006%3Aordinal%3A1:root",
+     "driver": "claudeAgent",
+     "providerInstanceId": "claudeAgent_2",
+     "occurredAt": "2026-01-01T13:33:43.192Z",
+     "type": "provider-turn.updated",
+     "payload": {
+      "id": "provider-turn:provider:claudeAgent:native-turn:turn%3Arun-attempt%3Arun%3Arun%253Athread%253Afa4e0006-0000-4000-8000-000000000006%253Aordinal%253A1%3Aattempt%3A1",
+      "providerThreadId": "provider-thread:provider:claudeAgent:native-thread:pending%3Arun%3Athread%3Afa4e0006-0000-4000-8000-000000000006%3Aordinal%3A1",
+      "nodeId": "node:run:run%3Athread%3Afa4e0006-0000-4000-8000-000000000006%3Aordinal%3A1:root",
+      "runAttemptId": "run-attempt:run:run%3Athread%3Afa4e0006-0000-4000-8000-000000000006%3Aordinal%3A1:attempt:1",
+      "nativeTurnRef": {
+       "driver": "claudeAgent",
+       "nativeId": "turn:run-attempt:run:run%3Athread%3Afa4e0006-0000-4000-8000-000000000006%3Aordinal%3A1:attempt:1",
+       "strength": "weak"
+      },
+      "ordinal": 1,
+      "status": "running",
+      "startedAt": "2026-01-01T13:33:42.479Z",
+      "completedAt": null
+     }
+    }
+   }
+  ]
+ }
+}

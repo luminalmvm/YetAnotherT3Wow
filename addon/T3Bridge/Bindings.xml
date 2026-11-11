@@ -1,0 +1,5 @@
+<Bindings>
+  <Binding name="T3BRIDGE_TOGGLE" header="T3BRIDGE" category="ADDONS">
+    T3Bridge_ToggleChat()
+  </Binding>
+</Bindings>

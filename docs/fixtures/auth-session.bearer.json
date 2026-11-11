@@ -1,0 +1,13 @@
+{
+ "_note": "GET /api/auth/session with Authorization: Bearer <token from `t3 auth session issue`>. VERIFIED (token itself never recorded).",
+ "data": {
+  "authenticated": true,
+  "scopes": [
+   "orchestration:read",
+   "orchestration:operate"
+  ],
+  "expiresAt": "2026-01-31T12:25:37.879Z",
+  "sessionMethod": "bearer-access-token",
+  "...": "auth descriptor as above"
+ }
+}

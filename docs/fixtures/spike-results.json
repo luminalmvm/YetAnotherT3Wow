@@ -1,0 +1,72 @@
+{
+ "_note": "Timings/outcomes of the write-path spike against throwaway threads (deleted afterwards).",
+ "data": {
+  "writeSpike": {
+   "launch": {
+    "ok": true,
+    "ms": 2967
+   },
+   "send": {
+    "ok": true,
+    "dispatchAckMs": 12,
+    "replyMs": 3707,
+    "serverDuplicateCommandId": "accepted (no error)",
+    "userMessages": 2,
+    "duplicateVisible": false
+   },
+   "setModel": {
+    "ok": true,
+    "ms": 109,
+    "models": 14
+   },
+   "approval": {
+    "ok": true,
+    "kind": "command",
+    "options": [
+     {
+      "id": "accept",
+      "label": "Allow"
+     },
+     {
+      "id": "acceptForSession",
+      "label": "Allow for session"
+     },
+     {
+      "id": "decline",
+      "label": "Deny"
+     }
+    ],
+    "finalStatus": "completed",
+    "reply": "DENIED"
+   },
+   "userInput": {
+    "ok": true,
+    "answerFormat": "answers: { <questionId>: <option label string> }",
+    "reply": "Blue"
+   },
+   "error": "timeout waiting for streaming",
+   "deleted": true
+  },
+  "interruptSpike": {
+   "ok": true,
+   "finalStatus": "interrupted",
+   "dispatchAckMs": 57,
+   "stopMs": 960,
+   "lenBefore": 21732,
+   "lenAfter": 21732,
+   "lastSys": [
+    "Stopped by user"
+   ],
+   "streamingAfter": false,
+   "statusTrace": [
+    "preparing/undefined",
+    "preparing/false",
+    "preparing/true",
+    "starting/true",
+    "running/true",
+    "running/false",
+    "interrupted/false"
+   ]
+  }
+ }
+}

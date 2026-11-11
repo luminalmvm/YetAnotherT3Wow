@@ -1,0 +1,18 @@
+{
+ "_note": "GET /.well-known/t3/environment (unauthenticated). VERIFIED.",
+ "data": {
+  "environmentId": "00000000-0000-4000-8000-0000000000e1",
+  "label": "<machine-label>",
+  "platform": {
+   "os": "windows",
+   "arch": "x64"
+  },
+  "serverVersion": "0.1.8-nightly.20261109.4433",
+  "orchestrationProtocolVersion": 2,
+  "capabilities": {
+   "threadStop": true,
+   "freshContext": true,
+   "...": "~60 more boolean capability flags"
+  }
+ }
+}

@@ -1,0 +1,61 @@
+{
+ "_note": "Verbatim WebSocket frames (truncated). Effect RPC JSON: Request / Chunk(+Ack) / Exit / Interrupt / Ping-Pong. VERIFIED.",
+ "data": [
+  {
+   "dir": "client->server",
+   "raw": "{\"_tag\":\"Ping\"}"
+  },
+  {
+   "dir": "client->server",
+   "raw": "{\"_tag\":\"Request\",\"id\":\"1\",\"tag\":\"orchestration.launchThread\",\"payload\":{\"commandId\":\"fa4e000e-0000-4000-8000-00000000000e\",\"creationSource\":\"web\",\"threadId\":\"fa4e0006-0000-4000-8000-000000000006\",\"projectId\":\"fa4e0007-0000-4000-8000-000000000007\",\"title\":\"T3Bridge fixture thread (safe to delete)\",\"modelSelection\":{\"instanceId\":\"claudeAgent_2\",\"model\":\"claude-haiku-4-5\"},\"runtimeMode\":\"approval-required\",\"interactionMode\":\"default\",\"workspaceStrategy\":{\"type\":\"root\"},\"initialMessage\":{\"messageId\":\"fa4e0008-0000-4000-8000-000000000008\",\"text\":\"Fixture test. Reply with a short markdown list of two fruits and one fenced code block containing `print(1)`. No tools.\",\"attachments\":[]}},\"headers\":[...<truncated>"
+  },
+  {
+   "dir": "server->client",
+   "raw": "{\"_tag\":\"Pong\"}"
+  },
+  {
+   "dir": "server->client",
+   "raw": "{\"_tag\":\"Exit\",\"requestId\":\"1\",\"exit\":{\"_tag\":\"Success\",\"value\":{\"threadId\":\"fa4e0006-0000-4000-8000-000000000006\",\"projection\":{\"thread\":{\"createdBy\":\"user\",\"creationSource\":\"web\",\"id\":\"fa4e0006-0000-4000-8000-000000000006\",\"projectId\":\"fa4e0007-0000-4000-8000-000000000007\",\"title\":\"T3Bridge fixture thread (safe to delete)\",\"providerInstanceId\":\"claudeAgent_2\",\"modelSelection\":{\"instanceId\":\"claudeAgent_2\",\"model\":\"claude-haiku-4-5\"},\"runtimeMode\":\"approval-required\",\"interactionMode\":\"default\",\"branch\":null,\"worktreePath\":\"C:\\\\Users\\\\<user>\\\\.t3\\\\scratch\\\\2026-01-01-fixture-test-reply-with-a-00000006\",\"pullRequests\":[],\"activeProviderThreadId\":\"provider-thread:provider:claudeAgent:native-th...<truncated>"
+  },
+  {
+   "dir": "client->server",
+   "raw": "{\"_tag\":\"Request\",\"id\":\"2\",\"tag\":\"orchestration.subscribeThread\",\"payload\":{\"threadId\":\"fa4e0006-0000-4000-8000-000000000006\",\"acceptBoundedSnapshot\":true},\"headers\":[]}"
+  },
+  {
+   "dir": "server->client",
+   "raw": "{\"_tag\":\"Chunk\",\"requestId\":\"2\",\"values\":[{\"kind\":\"snapshot\",\"snapshotSequence\":1685256,\"projection\":{\"thread\":{\"createdBy\":\"user\",\"creationSource\":\"web\",\"id\":\"fa4e0006-0000-4000-8000-000000000006\",\"projectId\":\"fa4e0007-0000-4000-8000-000000000007\",\"title\":\"T3Bridge fixture thread (safe to delete)\",\"providerInstanceId\":\"claudeAgent_2\",\"modelSelection\":{\"instanceId\":\"claudeAgent_2\",\"model\":\"claude-haiku-4-5\"},\"runtimeMode\":\"approval-required\",\"interactionMode\":\"default\",\"branch\":null,\"worktreePath\":\"C:\\\\Users\\\\<user>\\\\.t3\\\\scratch\\\\2026-01-01-fixture-test-reply-with-a-00000006\",\"pullRequests\":[],\"activeProviderThreadId\":\"provider-thread:provider:claudeAgent:native-thread:pending%3Arun%3Athread...<truncated>"
+  },
+  {
+   "dir": "client->server",
+   "raw": "{\"_tag\":\"Ack\",\"requestId\":\"2\"}"
+  },
+  {
+   "dir": "server->client",
+   "raw": "{\"_tag\":\"Chunk\",\"requestId\":\"2\",\"values\":[{\"kind\":\"event\",\"sequence\":1685257,\"event\":{\"id\":\"event:thread:fa4e0006-0000-4000-8000-000000000006:command:fa4e000e-0000-4000-8000-00000000000e%3Aprogress%3Asetup:fa4e0010-0000-4000-8000-000000000010\",\"threadId\":\"fa4e0006-0000-4000-8000-000000000006\",\"runId\":\"run:thread:fa4e0006-0000-4000-8000-000000000006:ordinal:1\",\"nodeId\":\"node:run:run%3Athread%3Afa4e0006-0000-4000-8000-000000000006%3Aordinal%3A1:root\",\"providerInstanceId\":\"claudeAgent_2\",\"occurredAt\":\"2026-01-01T13:33:42.380Z\",\"type\":\"turn-item.updated\",\"payload\":{\"id\":\"turn-item:provider:claudeAgent:native-item:workspace-preparation%3Arun%3Athread%3Afa4e0006-0000-4000-8000-000000000006%3Aordin...<truncated>"
+  },
+  {
+   "dir": "client->server",
+   "raw": "{\"_tag\":\"Ack\",\"requestId\":\"2\"}"
+  },
+  {
+   "dir": "server->client",
+   "raw": "{\"_tag\":\"Chunk\",\"requestId\":\"2\",\"values\":[{\"kind\":\"event\",\"sequence\":1685262,\"event\":{\"id\":\"event:thread:fa4e0006-0000-4000-8000-000000000006:provider-session:provider-session%3Aprovider-instance%3AclaudeAgent_2%3Athread%3Afa4e0006-0000-4000-8000-000000000006%3Afa4e0009-0000-4000-8000-000000000009:fa4e0016-0000-4000-8000-000000000016\",\"threadId\":\"fa4e0006-0000-4000-8000-000000000006\",\"driver\":\"claudeAgent\",\"providerInstanceId\":\"claudeAgent_2\",\"occurredAt\":\"2026-01-01T13:33:42.398Z\",\"type\":\"provider-session.attached\",\"payload\":{\"id\":\"provider-session:provider-instance:claudeAgent_2:thread:fa4e0006-0000-4000-8000-000000000006:fa4e0009-0000-4000-8000-000000000009\",\"driver\":\"claudeAgent\",\"provid...<truncated>"
+  },
+  {
+   "dir": "client->server",
+   "raw": "{\"_tag\":\"Ack\",\"requestId\":\"2\"}"
+  },
+  {
+   "dir": "server->client",
+   "raw": "{\"_tag\":\"Chunk\",\"requestId\":\"2\",\"values\":[{\"kind\":\"event\",\"sequence\":1685263,\"event\":{\"id\":\"event:thread:fa4e0006-0000-4000-8000-000000000006:provider-session:provider-session%3Aprovider-instance%3AclaudeAgent_2%3Athread%3Afa4e0006-0000-4000-8000-000000000006%3Afa4e0009-0000-4000-8000-000000000009:fa4e0017-0000-4000-8000-000000000017\",\"threadId\":\"fa4e0006-0000-4000-8000-000000000006\",\"driver\":\"claudeAgent\",\"providerInstanceId\":\"claudeAgent_2\",\"occurredAt\":\"2026-01-01T13:33:42.403Z\",\"type\":\"provider-session.updated\",\"payload\":{\"id\":\"provider-session:provider-instance:claudeAgent_2:thread:fa4e0006-0000-4000-8000-000000000006:fa4e0009-0000-4000-8000-000000000009\",\"driver\":\"claudeAgent\",\"provide...<truncated>"
+  },
+  {
+   "dir": "client->server",
+   "raw": "{\"_tag\":\"Ack\",\"requestId\":\"2\"}"
+  },
+  {
+   "dir": "server->client",
+   "raw": "{\"_tag\":\"Chunk\",\"requestId\":\"2\",\"values\":[{\"kind\":\"event\",\"sequence\":1685268,\"event\":{\"id\":\"event:thread:fa4e0006-0000-4000-8000-000000000006:provider-session:provider-session%3Aprovider-instance%3AclaudeAgent_2%3Athread%3Afa4e0006-0000-4000-8000-000000000006%3Afa4e0009-0000-4000-8000-000000000009:fa4e0014-0000-4000-8000-000000000014\",\"threadId\":\"fa4e0006-0000-4000-8000-000000000006\",\"runId\":\"run:thread:fa4e0006-0000-4000-8000-000000000006:ordinal:1\",\"nodeId\":\"node:run:run%3Athread%3Afa4e0006-0000-4000-8000-000000000006%3Aordinal%3A1:root\",\"driver\":\"claudeAgent\",\"providerInstanceId\":\"claudeAgent_2\",\"occurredAt\":\"2026-01-01T13:33:43.192Z\",\"type\":\"provider-turn.updated\",\"payload\":{\"id\":\"provid...<truncated>"
+  }
+ ]
+}

@@ -1,0 +1,26 @@
+## Interface: 16001
+## Title: T3Bridge
+## Notes: See and chat with your T3 Code threads in game. Type /t3
+## Version: 0.1.0
+## SavedVariables: T3BridgeDB
+## IconTexture: Interface\AddOns\T3Bridge\Media\icon
+## X-T3Bridge-Protocol: 1
+
+Compat.lua
+Codec.lua
+State.lua
+Inbox.lua
+Core.lua
+Demo.lua
+DemoMode.lua
+Inbound.lua
+Outbound.lua
+UI\Templates.xml
+UI\Tracker.lua
+UI\Messages.lua
+UI\Prompt.lua
+UI\CopyDialog.lua
+UI\ChatFrame.lua
+UI\Minimap.lua
+Spike.lua
+Slash.lua

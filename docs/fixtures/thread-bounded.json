@@ -1,0 +1,648 @@
+{
+ "_note": "GET /api/orchestration/threads/:id/bounded for a throwaway test thread. VERIFIED.",
+ "data": {
+  "snapshotSequence": 1685298,
+  "projection": {
+   "thread": {
+    "createdBy": "user",
+    "creationSource": "web",
+    "id": "fa4e0006-0000-4000-8000-000000000006",
+    "projectId": "fa4e0007-0000-4000-8000-000000000007",
+    "title": "T3Bridge fixture thread (safe to delete)",
+    "providerInstanceId": "claudeAgent_2",
+    "modelSelection": {
+     "instanceId": "claudeAgent_2",
+     "model": "claude-haiku-4-5"
+    },
+    "runtimeMode": "approval-required",
+    "interactionMode": "default",
+    "branch": null,
+    "worktreePath": "C:\\Users\\<user>\\.t3\\scratch\\2026-01-01-fixture-test-reply-with-a-00000006",
+    "pullRequests": [],
+    "activeProviderThreadId": "provider-thread:provider:claudeAgent:native-thread:pending%3Arun%3Athread%3Afa4e0006-0000-4000-8000-000000000006%3Aordinal%3A1",
+    "lineage": {
+     "parentThreadId": null,
+     "relationshipToParent": null,
+     "rootThreadId": "fa4e0006-0000-4000-8000-000000000006"
+    },
+    "forkedFrom": null,
+    "createdAt": "2026-01-01T13:33:42.348Z",
+    "updatedAt": "2026-01-01T13:33:45.328Z",
+    "archivedAt": null,
+    "settledOverride": null,
+    "settledAt": null,
+    "snoozedUntil": null,
+    "snoozedAt": null,
+    "lastVisitedAt": "2026-01-01T13:33:42.357Z",
+    "deletedAt": null
+   },
+   "runs": [
+    {
+     "id": "run:thread:fa4e0006-0000-4000-8000-000000000006:ordinal:1",
+     "threadId": "fa4e0006-0000-4000-8000-000000000006",
+     "ordinal": 1,
+     "providerInstanceId": "claudeAgent_2",
+     "modelSelection": {
+      "instanceId": "claudeAgent_2",
+      "model": "claude-haiku-4-5"
+     },
+     "providerThreadId": "provider-thread:provider:claudeAgent:native-thread:pending%3Arun%3Athread%3Afa4e0006-0000-4000-8000-000000000006%3Aordinal%3A1",
+     "userMessageId": "fa4e0008-0000-4000-8000-000000000008",
+     "rootNodeId": "node:run:run%3Athread%3Afa4e0006-0000-4000-8000-000000000006%3Aordinal%3A1:root",
+     "activeAttemptId": "run-attempt:run:run%3Athread%3Afa4e0006-0000-4000-8000-000000000006%3Aordinal%3A1:attempt:1",
+     "status": "completed",
+     "queuePosition": null,
+     "requestedAt": "2026-01-01T13:33:42.358Z",
+     "startedAt": "2026-01-01T13:33:42.403Z",
+     "completedAt": "2026-01-01T13:33:45.328Z",
+     "checkpointId": "checkpoint:scope:checkpoint-scope%3Athread%3Afa4e0006-0000-4000-8000-000000000006%3Aname%3Aroot:name:1",
+     "contextHandoffId": null,
+     "workspacePreparation": {
+      "type": "existing_worktree",
+      "worktreePath": "C:\\Users\\<user>\\.t3\\scratch\\2026-01-01-fixture-test-reply-with-a-00000006"
+     }
+    }
+   ],
+   "attempts": [
+    {
+     "id": "run-attempt:run:run%3Athread%3Afa4e0006-0000-4000-8000-000000000006%3Aordinal%3A1:attempt:1",
+     "nativeThreadId": "fa4e000c-0000-4000-8000-00000000000c",
+     "runId": "run:thread:fa4e0006-0000-4000-8000-000000000006:ordinal:1",
+     "attemptOrdinal": 1,
+     "rootNodeId": "node:run:run%3Athread%3Afa4e0006-0000-4000-8000-000000000006%3Aordinal%3A1:root",
+     "providerInstanceId": "claudeAgent_2",
+     "providerThreadId": "provider-thread:provider:claudeAgent:native-thread:pending%3Arun%3Athread%3Afa4e0006-0000-4000-8000-000000000006%3Aordinal%3A1",
+     "providerTurnId": null,
+     "reason": "initial",
+     "status": "completed",
+     "startedAt": "2026-01-01T13:33:42.403Z",
+     "completedAt": "2026-01-01T13:33:45.321Z"
+    }
+   ],
+   "nodes": [
+    {
+     "id": "node:run:run%3Athread%3Afa4e0006-0000-4000-8000-000000000006%3Aordinal%3A1:root",
+     "threadId": "fa4e0006-0000-4000-8000-000000000006",
+     "runId": "run:thread:fa4e0006-0000-4000-8000-000000000006:ordinal:1",
+     "parentNodeId": null,
+     "rootNodeId": "node:run:run%3Athread%3Afa4e0006-0000-4000-8000-000000000006%3Aordinal%3A1:root",
+     "kind": "root_turn",
+     "status": "completed",
+     "countsForRun": true,
+     "providerThreadId": "provider-thread:provider:claudeAgent:native-thread:pending%3Arun%3Athread%3Afa4e0006-0000-4000-8000-000000000006%3Aordinal%3A1",
+     "providerTurnId": null,
+     "nativeItemRef": null,
+     "runtimeRequestId": null,
+     "checkpointScopeId": "checkpoint-scope:thread:fa4e0006-0000-4000-8000-000000000006:name:root",
+     "startedAt": "2026-01-01T13:33:42.403Z",
+     "completedAt": "2026-01-01T13:33:45.328Z"
+    },
+    {
+     "id": "node:provider:claudeAgent:native-item:fa4e000d-0000-4000-8000-00000000000d",
+     "threadId": "fa4e0006-0000-4000-8000-000000000006",
+     "runId": "run:thread:fa4e0006-0000-4000-8000-000000000006:ordinal:1",
+     "parentNodeId": "node:run:run%3Athread%3Afa4e0006-0000-4000-8000-000000000006%3Aordinal%3A1:root",
+     "rootNodeId": "node:run:run%3Athread%3Afa4e0006-0000-4000-8000-000000000006%3Aordinal%3A1:root",
+     "kind": "assistant_message",
+     "status": "completed",
+     "countsForRun": false,
+     "providerThreadId": "provider-thread:provider:claudeAgent:native-thread:pending%3Arun%3Athread%3Afa4e0006-0000-4000-8000-000000000006%3Aordinal%3A1",
+     "providerTurnId": "provider-turn:provider:claudeAgent:native-turn:turn%3Arun-attempt%3Arun%3Arun%253Athread%253Afa4e0006-0000-4000-8000-000000000006%253Aordinal%253A1%3Aattempt%3A1",
+     "nativeItemRef": {
+      "driver": "claudeAgent",
+      "nativeId": "fa4e000d-0000-4000-8000-00000000000d",
+      "strength": "strong"
+     },
+     "runtimeRequestId": null,
+     "checkpointScopeId": null,
+     "startedAt": "2026-01-01T13:33:45.284Z",
+     "completedAt": "2026-01-01T13:33:45.284Z"
+    }
+   ],
+   "subagents": [],
+   "providerSessions": [
+    {
+     "id": "provider-session:provider-instance:claudeAgent_2:thread:fa4e0006-0000-4000-8000-000000000006:fa4e0009-0000-4000-8000-000000000009",
+     "driver": "claudeAgent",
+     "providerInstanceId": "claudeAgent_2",
+     "status": "ready",
+     "cwd": "C:\\Users\\<user>\\.t3\\scratch\\2026-01-01-fixture-test-reply-with-a-00000006",
+     "model": "claude-haiku-4-5",
+     "capabilities": {
+      "sessions": {
+       "supportsMultipleProviderThreadsPerSession": false,
+       "supportsModelSwitchInSession": true,
+       "supportsProviderSwitchingViaHandoff": true,
+       "supportsRuntimeModeSwitchInSession": false,
+       "pendingRequestsSurviveRestart": false
+      },
+      "threads": {
+       "canCreateEmptyThread": true,
+       "canReadThreadSnapshot": false,
+       "canRollbackThread": true,
+       "canForkThread": true,
+       "canForkFromTurn": true,
+       "canForkFromSubagentThread": false,
+       "exposesNativeThreadId": true
+      },
+      "turns": {
+       "exposesNativeTurnId": false,
+       "emitsTurnStarted": true,
+       "emitsTurnCompleted": true,
+       "supportsInterrupt": true,
+       "supportsActiveSteering": true,
+       "activeSteeringInterruptsTools": true,
+       "supportsSteeringByInterruptRestart": false,
+       "supportsQueuedMessages": true,
+       "terminalStatusQuality": "strong"
+      },
+      "streaming": {
+       "streamsAssistantText": true,
+       "streamsReasoning": true,
+       "streamsToolOutput": false,
+       "streamsPlanText": false,
+       "emitsMessageCompleted": true
+      },
+      "tools": {
+       "exposesToolItemIds": true,
+       "emitsToolStarted": true,
+       "emitsToolCompleted": true,
+       "emitsToolOutput": true,
+       "supportsMcpTools": true,
+       "supportsDynamicToolCallbacks": true
+      },
+      "approvals": {
+       "supportsCommandApproval": true,
+       "supportsFileReadApproval": true,
+       "supportsFileChangeApproval": true,
+       "supportsApplyPatchApproval": false,
+       "approvalsHaveNativeRequestIds": true,
+       "approvalCallbacksAreLiveOnly": true,
+       "approvalsCanOriginateFromSubagents": false
+      },
+      "planning": {
+       "emitsPlanUpdated": true,
+       "emitsTodoList": true,
+       "emitsProposedPlan": true,
+       "supportsStructuredQuestions": true,
+       "planDeltasHaveItemIds": false
+      },
+      "subagents": {
+       "supportsSubagents": true,
+       "exposesSubagentThreadIds": false,
+       "emitsSubagentLifecycle": true,
+       "canWaitForSubagents": false,
+       "canCloseSubagents": false,
+       "canForkSubagentThread": false
+      },
+      "context": {
+       "acceptsSystemContext": true,
+       "acceptsDeveloperContext": true,
+       "acceptsSyntheticUserContext": true,
+       "canGenerateSummaries": true,
+       "canConsumeHandoffSummaries": true,
+       "supportsDeltaHandoff": true,
+       "supportsFullThreadHandoff": true,
+       "maxRecommendedHandoffChars": null
+      },
+      "checkpointing": {
+       "appCanCheckpointFilesystem": true,
+       "supportsNestedCheckpointScopes": true,
+       "providerCanRollbackConversation": true,
+       "providerRollbackReturnsSnapshot": true,
+       "providerCanReadConversationSnapshot": false
+      },
+      "identity": {
+       "nativeThreadIds": "strong",
+       "nativeTurnIds": "weak",
+       "nativeItemIds": "strong",
+       "nativeRequestIds": "strong"
+      },
+      "runtimePolicy": {
+       "enforcement": "native"
+      }
+     },
+     "extensionStatuses": [],
+     "createdAt": "2026-01-01T13:33:42.398Z",
+     "updatedAt": "2026-01-01T13:33:42.398Z",
+     "lastError": null
+    }
+   ],
+   "providerThreads": [
+    {
+     "id": "provider-thread:provider:claudeAgent:native-thread:pending%3Arun%3Athread%3Afa4e0006-0000-4000-8000-000000000006%3Aordinal%3A1",
+     "driver": "claudeAgent",
+     "providerInstanceId": "claudeAgent_2",
+     "providerSessionId": "provider-session:provider-instance:claudeAgent_2:thread:fa4e0006-0000-4000-8000-000000000006:fa4e0009-0000-4000-8000-000000000009",
+     "appThreadId": "fa4e0006-0000-4000-8000-000000000006",
+     "ownerNodeId": null,
+     "nativeThreadRef": {
+      "driver": "claudeAgent",
+      "nativeId": "fa4e000c-0000-4000-8000-00000000000c",
+      "strength": "strong"
+     },
+     "nativeConversationHeadRef": null,
+     "status": "idle",
+     "firstRunOrdinal": 1,
+     "lastRunOrdinal": 1,
+     "handoffIds": [],
+     "forkedFrom": null,
+     "pendingBackgroundTasks": [],
+     "contextUsage": null,
+     "nativeMetadata": {
+      "claudeAttachmentBudget": {
+       "bytesUsed": 121,
+       "pagesUsed": 0
+      }
+     },
+     "goal": null,
+     "createdAt": "2026-01-01T13:33:42.358Z",
+     "updatedAt": "2026-01-01T13:33:45.321Z"
+    }
+   ],
+   "providerTurns": [
+    {
+     "id": "provider-turn:provider:claudeAgent:native-turn:turn%3Arun-attempt%3Arun%3Arun%253Athread%253Afa4e0006-0000-4000-8000-000000000006%253Aordinal%253A1%3Aattempt%3A1",
+     "providerThreadId": "provider-thread:provider:claudeAgent:native-thread:pending%3Arun%3Athread%3Afa4e0006-0000-4000-8000-000000000006%3Aordinal%3A1",
+     "nodeId": "node:run:run%3Athread%3Afa4e0006-0000-4000-8000-000000000006%3Aordinal%3A1:root",
+     "runAttemptId": "run-attempt:run:run%3Athread%3Afa4e0006-0000-4000-8000-000000000006%3Aordinal%3A1:attempt:1",
+     "nativeTurnRef": {
+      "driver": "claudeAgent",
+      "nativeId": "fa4e000d-0000-4000-8000-00000000000d",
+      "strength": "weak"
+     },
+     "ordinal": 1,
+     "status": "completed",
+     "startedAt": "2026-01-01T13:33:42.479Z",
+     "completedAt": "2026-01-01T13:33:45.315Z",
+     "tokenUsage": {
+      "usedTokens": 41928,
+      "maxTokens": 200000,
+      "inputTokens": 41838,
+      "cachedInputTokens": 29983,
+      "outputTokens": 90,
+      "reasoningOutputTokens": 0,
+      "promptCacheTtlMs": 3600000,
+      "promptCacheExpiresAt": "2026-01-01T14:33:44.699Z",
+      "updatedAt": "2026-01-01T13:33:45.301Z"
+     },
+     "turnTokenUsage": {
+      "usageScope": "main_agent",
+      "cachedInputTokens": 29983,
+      "cacheCreationTokens": 11845,
+      "reasoningTokens": 68,
+      "hasSubagents": false,
+      "models": [
+       "claude-haiku-4-5-20251001"
+      ],
+      "otherUsage": {
+       "inputTokens": 0,
+       "outputTokens": 0
+      },
+      "usageStatus": "complete",
+      "inputTokens": 41838,
+      "outputTokens": 90
+     },
+     "model": "claude-haiku-4-5"
+    }
+   ],
+   "runtimeRequests": [],
+   "messages": [
+    {
+     "createdBy": "user",
+     "creationSource": "web",
+     "id": "fa4e0008-0000-4000-8000-000000000008",
+     "threadId": "fa4e0006-0000-4000-8000-000000000006",
+     "runId": "run:thread:fa4e0006-0000-4000-8000-000000000006:ordinal:1",
+     "nodeId": "node:run:run%3Athread%3Afa4e0006-0000-4000-8000-000000000006%3Aordinal%3A1:root",
+     "role": "user",
+     "text": "Fixture test. Reply with a short markdown list of two fruits and one fenced code block containing `print(1)`. No tools.",
+     "attachments": [],
+     "streaming": false,
+     "createdAt": "2026-01-01T13:33:42.358Z",
+     "updatedAt": "2026-01-01T13:33:42.358Z"
+    },
+    {
+     "createdBy": "agent",
+     "creationSource": "provider",
+     "id": "message:provider:claudeAgent:native-item:fa4e000d-0000-4000-8000-00000000000d",
+     "threadId": "fa4e0006-0000-4000-8000-000000000006",
+     "runId": "run:thread:fa4e0006-0000-4000-8000-000000000006:ordinal:1",
+     "nodeId": "node:provider:claudeAgent:native-item:fa4e000d-0000-4000-8000-00000000000d",
+     "role": "assistant",
+     "text": "- Apple\n- Banana\n\n```python\nprint(1)\n```",
+     "attachments": [],
+     "streaming": false,
+     "createdAt": "2026-01-01T13:33:45.284Z",
+     "updatedAt": "2026-01-01T13:33:45.284Z"
+    }
+   ],
+   "plans": [],
+   "turnItems": [
+    {
+     "id": "turn-item:message:fa4e0008-0000-4000-8000-000000000008",
+     "threadId": "fa4e0006-0000-4000-8000-000000000006",
+     "runId": "run:thread:fa4e0006-0000-4000-8000-000000000006:ordinal:1",
+     "nodeId": "node:run:run%3Athread%3Afa4e0006-0000-4000-8000-000000000006%3Aordinal%3A1:root",
+     "providerThreadId": "provider-thread:provider:claudeAgent:native-thread:pending%3Arun%3Athread%3Afa4e0006-0000-4000-8000-000000000006%3Aordinal%3A1",
+     "providerTurnId": null,
+     "nativeItemRef": null,
+     "parentItemId": null,
+     "ordinal": 1000001,
+     "status": "completed",
+     "title": null,
+     "startedAt": "2026-01-01T13:33:42.358Z",
+     "completedAt": "2026-01-01T13:33:42.358Z",
+     "updatedAt": "2026-01-01T13:33:42.358Z",
+     "createdBy": "user",
+     "creationSource": "web",
+     "type": "user_message",
+     "messageId": "fa4e0008-0000-4000-8000-000000000008",
+     "inputIntent": "turn_start",
+     "text": "Fixture test. Reply with a short markdown list of two fruits and one fenced code block containing `print(1)`. No tools.",
+     "attachments": []
+    },
+    {
+     "id": "turn-item:provider:claudeAgent:native-item:workspace-preparation%3Arun%3Athread%3Afa4e0006-0000-4000-8000-000000000006%3Aordinal%3A1",
+     "threadId": "fa4e0006-0000-4000-8000-000000000006",
+     "runId": "run:thread:fa4e0006-0000-4000-8000-000000000006:ordinal:1",
+     "nodeId": "node:run:run%3Athread%3Afa4e0006-0000-4000-8000-000000000006%3Aordinal%3A1:root",
+     "providerThreadId": "provider-thread:provider:claudeAgent:native-thread:pending%3Arun%3Athread%3Afa4e0006-0000-4000-8000-000000000006%3Aordinal%3A1",
+     "providerTurnId": null,
+     "nativeItemRef": null,
+     "parentItemId": null,
+     "ordinal": 1000002,
+     "status": "completed",
+     "title": "Workspace ready",
+     "startedAt": "2026-01-01T13:33:42.358Z",
+     "completedAt": "2026-01-01T13:33:42.386Z",
+     "updatedAt": "2026-01-01T13:33:42.386Z",
+     "type": "command_execution",
+     "input": "Preparing workspace",
+     "outputOmitted": true,
+     "exitCode": 0
+    },
+    {
+     "id": "turn-item:provider:claudeAgent:native-item:msg_011CgwE6eEKmYvABbCmsZD4n%3Athinking%3A0",
+     "threadId": "fa4e0006-0000-4000-8000-000000000006",
+     "runId": "run:thread:fa4e0006-0000-4000-8000-000000000006:ordinal:1",
+     "nodeId": "node:run:run%3Athread%3Afa4e0006-0000-4000-8000-000000000006%3Aordinal%3A1:root",
+     "providerThreadId": "provider-thread:provider:claudeAgent:native-thread:pending%3Arun%3Athread%3Afa4e0006-0000-4000-8000-000000000006%3Aordinal%3A1",
+     "providerTurnId": "provider-turn:provider:claudeAgent:native-turn:turn%3Arun-attempt%3Arun%3Arun%253Athread%253Afa4e0006-0000-4000-8000-000000000006%253Aordinal%253A1%3Aattempt%3A1",
+     "nativeItemRef": {
+      "driver": "claudeAgent",
+      "nativeId": "msg_011CgwE6eEKmYvABbCmsZD4n:thinking:0",
+      "strength": "strong"
+     },
+     "parentItemId": null,
+     "ordinal": 1000003,
+     "status": "completed",
+     "title": "Thinking",
+     "startedAt": "2026-01-01T13:33:44.699Z",
+     "completedAt": "2026-01-01T13:33:45.166Z",
+     "updatedAt": "2026-01-01T13:33:45.166Z",
+     "type": "reasoning",
+     "text": "The user is asking for a simple fixture test. They want:\n1. A short markdown list of two fruits\n2. One fenced code block containing `print(1)`\n3. No tools should be used\n\nThis is straightforward - I should just provide the markdown directly without using any tools.",
+     "streaming": false
+    },
+    {
+     "id": "turn-item:provider:claudeAgent:native-item:fa4e000d-0000-4000-8000-00000000000d",
+     "threadId": "fa4e0006-0000-4000-8000-000000000006",
+     "runId": "run:thread:fa4e0006-0000-4000-8000-000000000006:ordinal:1",
+     "nodeId": "node:provider:claudeAgent:native-item:fa4e000d-0000-4000-8000-00000000000d",
+     "providerThreadId": "provider-thread:provider:claudeAgent:native-thread:pending%3Arun%3Athread%3Afa4e0006-0000-4000-8000-000000000006%3Aordinal%3A1",
+     "providerTurnId": "provider-turn:provider:claudeAgent:native-turn:turn%3Arun-attempt%3Arun%3Arun%253Athread%253Afa4e0006-0000-4000-8000-000000000006%253Aordinal%253A1%3Aattempt%3A1",
+     "nativeItemRef": {
+      "driver": "claudeAgent",
+      "nativeId": "fa4e000d-0000-4000-8000-00000000000d",
+      "strength": "strong"
+     },
+     "parentItemId": null,
+     "ordinal": 1000004,
+     "status": "completed",
+     "title": null,
+     "startedAt": "2026-01-01T13:33:45.284Z",
+     "completedAt": "2026-01-01T13:33:45.284Z",
+     "updatedAt": "2026-01-01T13:33:45.284Z",
+     "type": "assistant_message",
+     "messageId": "message:provider:claudeAgent:native-item:fa4e000d-0000-4000-8000-00000000000d",
+     "text": "- Apple\n- Banana\n\n```python\nprint(1)\n```",
+     "streaming": false
+    },
+    {
+     "id": "turn-item:provider:claudeAgent:native-item:checkpoint%3Acheckpoint%3Ascope%3Acheckpoint-scope%253Athread%253Afa4e0006-0000-4000-8000-000000000006%253Aname%253Aroot%3Aname%3A1",
+     "threadId": "fa4e0006-0000-4000-8000-000000000006",
+     "runId": "run:thread:fa4e0006-0000-4000-8000-000000000006:ordinal:1",
+     "nodeId": "node:run:run%3Athread%3Afa4e0006-0000-4000-8000-000000000006%3Aordinal%3A1:root",
+     "providerThreadId": "provider-thread:provider:claudeAgent:native-thread:pending%3Arun%3Athread%3Afa4e0006-0000-4000-8000-000000000006%3Aordinal%3A1",
+     "providerTurnId": null,
+     "nativeItemRef": null,
+     "parentItemId": null,
+     "ordinal": 1000005,
+     "status": "completed",
+     "title": null,
+     "startedAt": "2026-01-01T13:33:45.328Z",
+     "completedAt": "2026-01-01T13:33:45.328Z",
+     "updatedAt": "2026-01-01T13:33:45.328Z",
+     "type": "checkpoint",
+     "checkpointId": "checkpoint:scope:checkpoint-scope%3Athread%3Afa4e0006-0000-4000-8000-000000000006%3Aname%3Aroot:name:1",
+     "scopeId": "checkpoint-scope:thread:fa4e0006-0000-4000-8000-000000000006:name:root",
+     "files": []
+    }
+   ],
+   "checkpointScopes": [
+    {
+     "id": "checkpoint-scope:thread:fa4e0006-0000-4000-8000-000000000006:name:root",
+     "threadId": "fa4e0006-0000-4000-8000-000000000006",
+     "runId": "run:thread:fa4e0006-0000-4000-8000-000000000006:ordinal:1",
+     "nodeId": "node:run:run%3Athread%3Afa4e0006-0000-4000-8000-000000000006%3Aordinal%3A1:root",
+     "parentScopeId": null,
+     "providerThreadId": "provider-thread:provider:claudeAgent:native-thread:pending%3Arun%3Athread%3Afa4e0006-0000-4000-8000-000000000006%3Aordinal%3A1",
+     "kind": "root_run",
+     "ordinalWithinParent": 0,
+     "advancesAppRunCount": true,
+     "cwd": "C:\\Users\\<user>\\.t3\\scratch\\2026-01-01-fixture-test-reply-with-a-00000006",
+     "createdAt": "2026-01-01T13:33:42.386Z"
+    }
+   ],
+   "checkpoints": [
+    {
+     "id": "checkpoint:scope:checkpoint-scope%3Athread%3Afa4e0006-0000-4000-8000-000000000006%3Aname%3Aroot:name:0",
+     "threadId": "fa4e0006-0000-4000-8000-000000000006",
+     "scopeId": "checkpoint-scope:thread:fa4e0006-0000-4000-8000-000000000006:name:root",
+     "runId": null,
+     "nodeId": "node:run:run%3Athread%3Afa4e0006-0000-4000-8000-000000000006%3Aordinal%3A1:root",
+     "parentCheckpointId": null,
+     "ordinalWithinScope": 0,
+     "appRunOrdinal": null,
+     "ref": "refs/t3/orchestration-v2/checkpoints/ZjJiODI3MzdjZjc4ZTUyMGQxZmM5YmM5MDRmZDNjMWE/ordinal/0",
+     "status": "missing",
+     "files": [],
+     "capturedAt": "2026-01-01T13:33:42.358Z"
+    },
+    {
+     "id": "checkpoint:scope:checkpoint-scope%3Athread%3Afa4e0006-0000-4000-8000-000000000006%3Aname%3Aroot:name:1",
+     "threadId": "fa4e0006-0000-4000-8000-000000000006",
+     "scopeId": "checkpoint-scope:thread:fa4e0006-0000-4000-8000-000000000006:name:root",
+     "runId": "run:thread:fa4e0006-0000-4000-8000-000000000006:ordinal:1",
+     "nodeId": "node:run:run%3Athread%3Afa4e0006-0000-4000-8000-000000000006%3Aordinal%3A1:root",
+     "parentCheckpointId": "checkpoint:scope:checkpoint-scope%3Athread%3Afa4e0006-0000-4000-8000-000000000006%3Aname%3Aroot:name:0",
+     "ordinalWithinScope": 1,
+     "appRunOrdinal": 1,
+     "ref": "refs/t3/orchestration-v2/checkpoints/ZjJiODI3MzdjZjc4ZTUyMGQxZmM5YmM5MDRmZDNjMWE/ordinal/1",
+     "status": "missing",
+     "files": [],
+     "capturedAt": "2026-01-01T13:33:45.328Z"
+    }
+   ],
+   "contextHandoffs": [],
+   "contextTransfers": [],
+   "visibleTurnItems": [
+    {
+     "position": 0,
+     "visibility": "local",
+     "sourceThreadId": "fa4e0006-0000-4000-8000-000000000006",
+     "sourceItemId": "turn-item:message:fa4e0008-0000-4000-8000-000000000008",
+     "item": {
+      "id": "turn-item:message:fa4e0008-0000-4000-8000-000000000008",
+      "threadId": "fa4e0006-0000-4000-8000-000000000006",
+      "runId": "run:thread:fa4e0006-0000-4000-8000-000000000006:ordinal:1",
+      "nodeId": "node:run:run%3Athread%3Afa4e0006-0000-4000-8000-000000000006%3Aordinal%3A1:root",
+      "providerThreadId": "provider-thread:provider:claudeAgent:native-thread:pending%3Arun%3Athread%3Afa4e0006-0000-4000-8000-000000000006%3Aordinal%3A1",
+      "providerTurnId": null,
+      "nativeItemRef": null,
+      "parentItemId": null,
+      "ordinal": 1000001,
+      "status": "completed",
+      "title": null,
+      "startedAt": "2026-01-01T13:33:42.358Z",
+      "completedAt": "2026-01-01T13:33:42.358Z",
+      "updatedAt": "2026-01-01T13:33:42.358Z",
+      "createdBy": "user",
+      "creationSource": "web",
+      "type": "user_message",
+      "messageId": "fa4e0008-0000-4000-8000-000000000008",
+      "inputIntent": "turn_start",
+      "text": "Fixture test. Reply with a short markdown list of two fruits and one fenced code block containing `print(1)`. No tools.",
+      "attachments": []
+     }
+    },
+    {
+     "position": 1,
+     "visibility": "local",
+     "sourceThreadId": "fa4e0006-0000-4000-8000-000000000006",
+     "sourceItemId": "turn-item:provider:claudeAgent:native-item:workspace-preparation%3Arun%3Athread%3Afa4e0006-0000-4000-8000-000000000006%3Aordinal%3A1",
+     "item": {
+      "id": "turn-item:provider:claudeAgent:native-item:workspace-preparation%3Arun%3Athread%3Afa4e0006-0000-4000-8000-000000000006%3Aordinal%3A1",
+      "threadId": "fa4e0006-0000-4000-8000-000000000006",
+      "runId": "run:thread:fa4e0006-0000-4000-8000-000000000006:ordinal:1",
+      "nodeId": "node:run:run%3Athread%3Afa4e0006-0000-4000-8000-000000000006%3Aordinal%3A1:root",
+      "providerThreadId": "provider-thread:provider:claudeAgent:native-thread:pending%3Arun%3Athread%3Afa4e0006-0000-4000-8000-000000000006%3Aordinal%3A1",
+      "providerTurnId": null,
+      "nativeItemRef": null,
+      "parentItemId": null,
+      "ordinal": 1000002,
+      "status": "completed",
+      "title": "Workspace ready",
+      "startedAt": "2026-01-01T13:33:42.358Z",
+      "completedAt": "2026-01-01T13:33:42.386Z",
+      "updatedAt": "2026-01-01T13:33:42.386Z",
+      "type": "command_execution",
+      "input": "Preparing workspace",
+      "outputOmitted": true,
+      "exitCode": 0
+     }
+    },
+    {
+     "position": 2,
+     "visibility": "local",
+     "sourceThreadId": "fa4e0006-0000-4000-8000-000000000006",
+     "sourceItemId": "turn-item:provider:claudeAgent:native-item:msg_011CgwE6eEKmYvABbCmsZD4n%3Athinking%3A0",
+     "item": {
+      "id": "turn-item:provider:claudeAgent:native-item:msg_011CgwE6eEKmYvABbCmsZD4n%3Athinking%3A0",
+      "threadId": "fa4e0006-0000-4000-8000-000000000006",
+      "runId": "run:thread:fa4e0006-0000-4000-8000-000000000006:ordinal:1",
+      "nodeId": "node:run:run%3Athread%3Afa4e0006-0000-4000-8000-000000000006%3Aordinal%3A1:root",
+      "providerThreadId": "provider-thread:provider:claudeAgent:native-thread:pending%3Arun%3Athread%3Afa4e0006-0000-4000-8000-000000000006%3Aordinal%3A1",
+      "providerTurnId": "provider-turn:provider:claudeAgent:native-turn:turn%3Arun-attempt%3Arun%3Arun%253Athread%253Afa4e0006-0000-4000-8000-000000000006%253Aordinal%253A1%3Aattempt%3A1",
+      "nativeItemRef": {
+       "driver": "claudeAgent",
+       "nativeId": "msg_011CgwE6eEKmYvABbCmsZD4n:thinking:0",
+       "strength": "strong"
+      },
+      "parentItemId": null,
+      "ordinal": 1000003,
+      "status": "completed",
+      "title": "Thinking",
+      "startedAt": "2026-01-01T13:33:44.699Z",
+      "completedAt": "2026-01-01T13:33:45.166Z",
+      "updatedAt": "2026-01-01T13:33:45.166Z",
+      "type": "reasoning",
+      "text": "The user is asking for a simple fixture test. They want:\n1. A short markdown list of two fruits\n2. One fenced code block containing `print(1)`\n3. No tools should be used\n\nThis is straightforward - I should just provide the markdown directly without using any tools.",
+      "streaming": false
+     }
+    },
+    {
+     "position": 3,
+     "visibility": "local",
+     "sourceThreadId": "fa4e0006-0000-4000-8000-000000000006",
+     "sourceItemId": "turn-item:provider:claudeAgent:native-item:fa4e000d-0000-4000-8000-00000000000d",
+     "item": {
+      "id": "turn-item:provider:claudeAgent:native-item:fa4e000d-0000-4000-8000-00000000000d",
+      "threadId": "fa4e0006-0000-4000-8000-000000000006",
+      "runId": "run:thread:fa4e0006-0000-4000-8000-000000000006:ordinal:1",
+      "nodeId": "node:provider:claudeAgent:native-item:fa4e000d-0000-4000-8000-00000000000d",
+      "providerThreadId": "provider-thread:provider:claudeAgent:native-thread:pending%3Arun%3Athread%3Afa4e0006-0000-4000-8000-000000000006%3Aordinal%3A1",
+      "providerTurnId": "provider-turn:provider:claudeAgent:native-turn:turn%3Arun-attempt%3Arun%3Arun%253Athread%253Afa4e0006-0000-4000-8000-000000000006%253Aordinal%253A1%3Aattempt%3A1",
+      "nativeItemRef": {
+       "driver": "claudeAgent",
+       "nativeId": "fa4e000d-0000-4000-8000-00000000000d",
+       "strength": "strong"
+      },
+      "parentItemId": null,
+      "ordinal": 1000004,
+      "status": "completed",
+      "title": null,
+      "startedAt": "2026-01-01T13:33:45.284Z",
+      "completedAt": "2026-01-01T13:33:45.284Z",
+      "updatedAt": "2026-01-01T13:33:45.284Z",
+      "type": "assistant_message",
+      "messageId": "message:provider:claudeAgent:native-item:fa4e000d-0000-4000-8000-00000000000d",
+      "text": "- Apple\n- Banana\n\n```python\nprint(1)\n```",
+      "streaming": false
+     }
+    },
+    {
+     "position": 4,
+     "visibility": "local",
+     "sourceThreadId": "fa4e0006-0000-4000-8000-000000000006",
+     "sourceItemId": "turn-item:provider:claudeAgent:native-item:checkpoint%3Acheckpoint%3Ascope%3Acheckpoint-scope%253Athread%253Afa4e0006-0000-4000-8000-000000000006%253Aname%253Aroot%3Aname%3A1",
+     "item": {
+      "id": "turn-item:provider:claudeAgent:native-item:checkpoint%3Acheckpoint%3Ascope%3Acheckpoint-scope%253Athread%253Afa4e0006-0000-4000-8000-000000000006%253Aname%253Aroot%3Aname%3A1",
+      "threadId": "fa4e0006-0000-4000-8000-000000000006",
+      "runId": "run:thread:fa4e0006-0000-4000-8000-000000000006:ordinal:1",
+      "nodeId": "node:run:run%3Athread%3Afa4e0006-0000-4000-8000-000000000006%3Aordinal%3A1:root",
+      "providerThreadId": "provider-thread:provider:claudeAgent:native-thread:pending%3Arun%3Athread%3Afa4e0006-0000-4000-8000-000000000006%3Aordinal%3A1",
+      "providerTurnId": null,
+      "nativeItemRef": null,
+      "parentItemId": null,
+      "ordinal": 1000005,
+      "status": "completed",
+      "title": null,
+      "startedAt": "2026-01-01T13:33:45.328Z",
+      "completedAt": "2026-01-01T13:33:45.328Z",
+      "updatedAt": "2026-01-01T13:33:45.328Z",
+      "type": "checkpoint",
+      "checkpointId": "checkpoint:scope:checkpoint-scope%3Athread%3Afa4e0006-0000-4000-8000-000000000006%3Aname%3Aroot:name:1",
+      "scopeId": "checkpoint-scope:thread:fa4e0006-0000-4000-8000-000000000006:name:root",
+      "files": []
+     }
+    }
+   ],
+   "updatedAt": "2026-01-01T13:33:45.328Z"
+  },
+  "historyCursor": null,
+  "hasMoreHistory": false,
+  "latestLocalTurnOrdinal": 1000005
+ }
+}

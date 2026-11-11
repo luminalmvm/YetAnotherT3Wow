@@ -1,0 +1,20 @@
+{
+ "_note": "GET /api/auth/session without credentials. VERIFIED.",
+ "data": {
+  "authenticated": false,
+  "auth": {
+   "policy": "remote-reachable",
+   "bootstrapMethods": [
+    "desktop-bootstrap",
+    "one-time-token"
+   ],
+   "sessionMethods": [
+    "browser-session-cookie",
+    "bearer-access-token",
+    "dpop-access-token"
+   ],
+   "sessionCookieName": "t3_session_3773",
+   "serverUpdateScope": "environment:maintain"
+  }
+ }
+}

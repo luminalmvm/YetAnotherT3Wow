@@ -1,0 +1,2 @@
+-- T3Bridge fallback inbox (PROTOCOL.md section 2.1). The companion rewrites this file in place with
+-- a full snapshot; WoW only reads it at login or /reload. Empty stub until the companion writes it.
