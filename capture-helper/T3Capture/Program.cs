@@ -1,4 +1,5 @@
 // T3Capture: read-only Windows.Graphics.Capture of the WoW window's top-left region.
+// `T3Capture version|clipboard|decode|convert|procinfo` run one-shot image tools instead (Tools.cs).
 // Streams luminance crops that contain the T3Bridge sync row to stdout (binary records);
 // status and stats go to stderr as JSON lines. Never injects input, never reads process memory.
 //
@@ -86,6 +87,8 @@ internal static class Program
 
     static int Main(string[] args)
     {
+        // One-shot image/clipboard tools (Tools.cs) for the companion's image support.
+        if (Tools.IsTool(args)) return Tools.Run(args);
         Native.SetProcessDpiAwarenessContext(Native.DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
         Options opt;
         try { opt = Options.Parse(args); } catch (Exception e) { Console.Error.WriteLine(e.Message); return 2; }

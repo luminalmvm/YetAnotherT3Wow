@@ -20,6 +20,18 @@ T3Capture\bin\Release\net7.0-windows10.0.22621.0\T3Capture.exe --list           
 T3Capture\bin\Release\net7.0-windows10.0.22621.0\T3Capture.exe --process Wow --keep-alive    # stats on stderr
 ```
 
+### One-shot image tools (images in chat, PROTOCOL rev 1.3)
+`T3Capture <tool> ...` runs one tool, prints one JSON line on stdout and exits (see `Tools.cs`). The companion
+starts them on demand; none of them captures the screen or touches the game.
+
+| Tool | What it does | Exit codes |
+|---|---|---|
+| `version` | `{"version":2,"tools":[...]}` (the companion uses it to skip an older helper build) | 0 |
+| `clipboard --out <file.png>` | Reads the Windows clipboard (Win32, read-only): the `PNG` format, a copied image file, `CF_DIB`, `CF_DIBV5`; writes a PNG | 0 image, 2 no image, 1 error |
+| `decode --in <file> --max 512 --out <raw>` | Decodes with Windows Imaging Component (PNG, JPEG, GIF first frame, BMP, TIFF, WebP/HEIF with the Windows codecs), applies EXIF orientation, fits into max x max (never upscales, Fant scaling), writes raw RGBA | 0 / 1 |
+| `convert --in <file> --out <file.jpg> [--max-edge 4096] [--quality 90]` | Re-encodes as JPEG (uploads over T3's 10 MiB limit, formats T3 does not accept) | 0 / 1 |
+| `procinfo --process Wow` | `[{"pid","startMs"}]`: tells the companion when WoW was restarted (which frees the image slots) | 0 |
+
 ## T3TestWindow (test only)
 A synthetic WoW stand-in for end-to-end tests without the game. It renders through a D3D11 flip-model swapchain
 (`--renderer d3d`, the default; `gdi` is also available) and draws matrix frames from a JSON file made by
