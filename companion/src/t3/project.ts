@@ -1,5 +1,5 @@
 // Pure projections from T3 wire objects (orchestration protocol 2) to companion domain types.
-import type { ChatMessage, EffortChoice, PendingRequest, ProviderSummary, ThreadSummary } from "./types.js";
+import type { ChatMessage, EffortChoice, ImageRef, PendingRequest, ProviderSummary, ThreadSummary } from "./types.js";
 
 const toMs = (s: unknown): number | null => {
   if (typeof s !== "string") return null;
@@ -135,6 +135,21 @@ function inputText(it: any): string {
   return qs.map((q) => `${q.header ? q.header + ": " : ""}${q.question}${(q.options ?? []).length ? "\n" + q.options.map((o: any, k: number) => `  ${k + 1}. ${o.label}${o.description ? " - " + o.description : ""}`).join("\n") : ""}`).join("\n\n") || "Input requested";
 }
 
+/**
+ * Image attachments of a user_message item (VERIFIED live, T3 0.1.8): attachments[] =
+ * {type:"image", id:"<threadId>-<uuid>", name, mimeType, sizeBytes}. Other attachment types are ignored.
+ */
+export function imageAttachments(raw: unknown): ImageRef[] {
+  if (!Array.isArray(raw)) return [];
+  const out: ImageRef[] = [];
+  for (const a of raw) {
+    if (!a || a.type !== "image" || typeof a.id !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(a.id)) continue;
+    out.push({ id: a.id, name: String(a.name ?? "image"), mimeType: String(a.mimeType ?? ""), sizeBytes: Number(a.sizeBytes ?? 0) });
+    if (out.length >= 16) break;
+  }
+  return out;
+}
+
 export interface ItemsToMessagesOptions {
   includeReasoning?: boolean;
   maxToolLines?: number;
@@ -168,7 +183,12 @@ export function itemsToMessages(items: any[], o: ItemsToMessagesOptions = {}): C
     }
     let msg: ChatMessage | null = null;
     switch (it.type) {
-      case "user_message": msg = { i, role: "u", ts, text: String(it.text ?? ""), streaming: false }; break;
+      case "user_message": {
+        msg = { i, role: "u", ts, text: String(it.text ?? ""), streaming: false };
+        const images = imageAttachments(it.attachments);
+        if (images.length) msg.images = images;
+        break;
+      }
       case "assistant_message": msg = { i, role: "a", ts, text: String(it.text ?? ""), streaming }; break;
       case "proposed_plan": msg = { i, role: "a", ts, text: String(it.markdown ?? ""), streaming }; break;
       case "reasoning": if (o.includeReasoning) msg = { i, role: "s", ts, text: `(thinking) ${firstLine(it.text, 300)}`, streaming }; break;

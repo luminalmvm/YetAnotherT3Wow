@@ -7,7 +7,7 @@
 //   node dist/main.js --login         issue/refresh the scoped T3 credential (DPAPI-stored)
 //   node dist/main.js --pair          read a one-time pairing token from stdin and exchange it
 //   node dist/main.js --once [--out <file>]   write one snapshot from live T3 data and exit
-//   node dist/main.js --clear         overwrite live.lua/Inbox.lua with an empty snapshot (no conversation text)
+//   node dist/main.js --clear         overwrite live.lua/Inbox.lua with an empty snapshot and blank used image slots
 //   Stop a running bridge cleanly: create %LOCALAPPDATA%\T3Bridge\stop.request (scripts/stop-bridge.ps1 does).
 //   --config <path>  --capture wgc|screenshot|off  --log-level debug|info|warn
 import { closeSync, existsSync, mkdirSync, openSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
@@ -25,6 +25,9 @@ import { CaptureHelper, defaultHelperPath, helperArgs } from "./wow/captureClien
 import { decodeImage } from "./wow/frameDecoder.js";
 import { ScreenshotWatcher } from "./wow/screenshotWatcher.js";
 import { runSelftest } from "./selftest.js";
+import { HelperImageTools } from "./images/helper.js";
+import { ImageManager } from "./images/manager.js";
+import { SlotPool } from "./images/slots.js";
 
 const argv = process.argv.slice(2);
 const flag = (k: string) => argv.includes(k);
@@ -117,8 +120,9 @@ async function runBridge(cfg: CompanionConfig, demo: boolean): Promise<void> {
     }
   }
   let writer: LiveWriter;
+  const images = makeImages(cfg, t3!, () => writer?.markDirty());
   const bridge = new Bridge({
-    t3, environmentId, asciiOnly: cfg.asciiOnly,
+    t3, environmentId, asciiOnly: cfg.asciiOnly, images,
     caps: { maxThreads: cfg.maxThreads, focusWindow: cfg.focusWindow, maxFocusWindow: cfg.maxFocusWindow, maxMessageBytes: cfg.maxMessageBytes, maxSnapshotBytes: cfg.maxSnapshotBytes, transliterate: cfg.transliterate },
     onDirty: () => writer?.markDirty(),
     onAck: () => writer?.writeNow("ack"),
@@ -154,6 +158,8 @@ async function runBridge(cfg: CompanionConfig, demo: boolean): Promise<void> {
     bridge.clear();
     const w = writer.writeNow("exit", true);
     log.info(w ? `cleared ${liveFile} (seq ${w.seq})` : `could not clear ${liveFile}: ${writer.lastError?.message}`);
+    // Privacy: no image stays in the slot textures either.
+    if (images) { try { log.info(`blanked ${images.stop()} image slots`); } catch (e) { log.warn(`could not blank image slots: ${(e as Error).message}`); } }
     try { t3.stop(); } catch { /* ignore */ }
     release();
     process.exit(code);
@@ -170,6 +176,26 @@ async function runBridge(cfg: CompanionConfig, demo: boolean): Promise<void> {
 
 export function stopRequestPath(): string { return join(appDataDir(), "stop.request"); }
 
+function slotPool(cfg: CompanionConfig): SlotPool {
+  return new SlotPool({ dir: resolvePaths(cfg).imageSlotsDir, stateFile: join(appDataDir(), "imgslots.json"), resetOnReload: !!cfg.images.resetOnReload });
+}
+
+/** Image support (PROTOCOL rev 1.3), or undefined when disabled in config. Never creates slot files. */
+function makeImages(cfg: CompanionConfig, t3: T3Client, onDirty: () => void): ImageManager | undefined {
+  if (!cfg.images.enabled) { log.info("images: disabled in config"); return undefined; }
+  const pool = slotPool(cfg);
+  const tools = new HelperImageTools(cfg.capture.helperPath || undefined);
+  const images = new ImageManager({
+    t3, tools, pool, tmpDir: join(appDataDir(), "tmp"), screenshotsDir: cfg.capture.screenshotsDir, onDirty,
+    maxNewPerSnapshot: cfg.images.maxNewPerSnapshot, maxStaged: cfg.images.maxStaged,
+    recentScreenshotMs: cfg.images.recentScreenshotMinutes * 60_000,
+    resetHint: cfg.images.resetOnReload ? "reload" : "restart", wowProcess: cfg.capture.processName,
+  });
+  void tools.resolveExe().then((exe) => { if (!exe) onDirty(); });
+  log.info(pool.total ? `images: ${pool.total} slots in ${resolvePaths(cfg).imageSlotsDir} (${pool.left} free for this WoW session)` : "images: no image slots installed (install-addon.ps1 -ImageSlots 100, with WoW closed); attachments still work");
+  return images;
+}
+
 /** --clear: overwrite live.lua (and Inbox.lua) in place with an empty snapshot, e.g. after a crash. */
 function clearFiles(cfg: CompanionConfig): boolean {
   const p = resolvePaths(cfg);
@@ -182,6 +208,7 @@ function clearFiles(cfg: CompanionConfig): boolean {
       console.log(`cleared ${file} (${r.bytes} B)`);
     } catch (e) { ok = false; console.log(`could not clear ${file}: ${(e as Error).message}`); }
   }
+  try { console.log(`blanked ${slotPool(cfg).blankUsed()} image slots`); } catch (e) { ok = false; console.log(`could not blank image slots: ${(e as Error).message}`); }
   return ok;
 }
 

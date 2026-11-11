@@ -4,6 +4,7 @@ import { ActionError, executeCommand, type ActionContext } from "./actions.js";
 import { log } from "./log.js";
 import { DEFAULT_CAPS, emptySnapshotLua, fitSnapshot, focusToSnap, RidMap, selectThreads, threadToSnap, TidMap, type Caps, type SnapshotDoc } from "./model/snapshot.js";
 import type { T3Client } from "./t3/client.js";
+import type { ImageManager } from "./images/manager.js";
 import { parseCommand, type Frame } from "./wow/frameCodec.js";
 import { decodeUtf8, Reassembler } from "./wow/frameDecoder.js";
 
@@ -23,6 +24,8 @@ export interface BridgeOptions {
   /** Called when an ack must be written immediately. */
   onAck: () => void;
   now?: () => number;
+  /** Image support (PROTOCOL rev 1.3); absent = no images (seg st="off", clip/shot report it). */
+  images?: ImageManager;
 }
 
 export interface InboundEvent { at: number; kind: "complete" | "duplicate" | "partial" | "error"; seq?: number; cmd?: string; detail?: string; ms?: number }
@@ -58,9 +61,19 @@ export class Bridge {
     const threads = list.map((t) => threadToSnap(t, this.tids, projects, providers, this.caps));
     const doc: SnapshotDoc = { v: 1, sid: this.sid, seq, ts, ack: this.ack, asid: this.asid, threads };
     if (this.err) doc.err = this.err;
+    const img = this.o.images;
+    if (img) doc.imgslots = img.slotsInfo();
     const detail = t3.focusDetail();
-    if (detail && focusT3Id && detail.id === focusT3Id) {
-      doc.focus = focusToSnap({ detail, windowStart: this.focus.windowStart }, this.tids, this.rids, providers, this.caps);
+    if (detail && focusT3Id && detail.id === focusT3Id && this.focus.tid) {
+      const tid = this.focus.tid;
+      img?.beginRender();
+      doc.focus = focusToSnap({
+        detail, windowStart: this.focus.windowStart,
+        resolveImage: img ? (ref) => img.resolve(ref, focusT3Id) : undefined,
+        imageWindow: this.caps.focusWindow,
+        staged: img?.stagedFor(tid).map((s) => ({ aid: s.aid, s: s.slot, ...(s.slot ? { w: s.w, h: s.h } : {}), name: s.name })),
+        notice: img?.notice(tid),
+      }, this.tids, this.rids, providers, this.caps);
     }
     return doc;
   }
@@ -114,7 +127,13 @@ export class Bridge {
         t3: this.o.t3, tids: this.tids, rids: this.rids, focus: this.focus,
         caps: { focusWindow: this.caps.focusWindow, maxFocusWindow: this.caps.maxFocusWindow },
         environmentId: this.o.environmentId, openUrl: this.o.openUrl,
-        onHello: (h) => { this.addonInfo = { proto: h.proto, addonVersion: h.addonVersion, cell: h.cell, rows: h.rows }; log.info(`addon hello: ${JSON.stringify(this.addonInfo)}`); },
+        onHello: (h) => {
+          this.addonInfo = { proto: h.proto, addonVersion: h.addonVersion, cell: h.cell, rows: h.rows, img: h.img };
+          log.info(`addon hello: ${JSON.stringify(this.addonInfo)}`);
+          // 5th hello field (rev 1.3): "0" = the user marked image slots as not working (/t3 spike img fail).
+          if (this.o.images) this.o.images.addonImagesOff = h.img === "0";
+        },
+        images: this.o.images,
       };
       try {
         await executeCommand(ctx, cmd);
@@ -132,7 +151,7 @@ export class Bridge {
   }
 
   private setAck(sidHex: string, seq: number): void {
-    if (this.asid !== sidHex) { this.asid = sidHex; this.ack = 0; this.err = undefined; }
+    if (this.asid !== sidHex) { this.asid = sidHex; this.ack = 0; this.err = undefined; this.o.images?.onAddonSession(sidHex); }
     if (seq > this.ack) this.ack = seq;
   }
 

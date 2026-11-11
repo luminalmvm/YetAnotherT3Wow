@@ -22,6 +22,12 @@ const SPECS: [string, string, number, string, number?][] = [
   ["send-206-boundary", "0badf00d", 9, "send\ta1b2c3d4\t0badf00d-9\t" + "a".repeat(206 - "send\ta1b2c3d4\t0badf00d-9\t".length)],
   ["send-207-two-rows-mode", "0badf00d", 10, "send\ta1b2c3d4\t0badf00d-10\t" + "b".repeat(207 - "send\ta1b2c3d4\t0badf00d-10\t".length)],
   ["send-max-5-parts", "ffffffff", 65535, "send\ta1b2c3d4\tffffffff-65535\t" + "Zz ✓ é ".repeat(444)],
+  // PROTOCOL rev 1.3 (D17)
+  ["clip-quiet", "9f3a01c2", 13, "clip\ta1b2c3d4\t1"],
+  ["shot", "9f3a01c2", 14, "shot\ta1b2c3d4"],
+  ["unstage", "9f3a01c2", 15, "unstage\ta1b2c3d4\tk1"],
+  ["send-images-only", "9f3a01c2", 16, "send\ta1b2c3d4\t9f3a01c2-16\t"],
+  ["hello-img", "9f3a01c2", 17, "hello\t1\t0.2.0\t2\t8\t0"],
 ];
 
 describe("test vectors", () => {

@@ -32,6 +32,20 @@ export interface CompanionConfig {
   maxFocusWindow: number;
   maxMessageBytes: number;
   maxSnapshotBytes: number;
+  /** Images in chat (PROTOCOL rev 1.3). */
+  images: {
+    enabled: boolean;
+    /** Override for <AddOns>\T3Bridge_Img (the installer's -ImageSlots creates it). */
+    slotsDir?: string;
+    /** Reset the slot pool on a new addon session too. Only if `/t3 spike img` showed /reload frees textures. */
+    resetOnReload: boolean;
+    /** At most this many new images per snapshot. */
+    maxNewPerSnapshot: number;
+    /** Staged attachments per message. */
+    maxStaged: number;
+    /** `shot`: only screenshots newer than this many minutes. */
+    recentScreenshotMinutes: number;
+  };
   t3: {
     /** server-runtime.json path */
     runtimeFile: string;
@@ -102,6 +116,7 @@ export function defaultConfig(): CompanionConfig {
     maxFocusWindow: 120,
     maxMessageBytes: 8000,
     maxSnapshotBytes: 480 * 1024,
+    images: { enabled: true, resetOnReload: false, maxNewPerSnapshot: 8, maxStaged: 4, recentScreenshotMinutes: 15 },
     t3: {
       runtimeFile: join(home, ".t3", "userdata", "server-runtime.json"),
       cliPath: join(home, ".t3", "bin", "t3.cmd"),
@@ -151,5 +166,6 @@ export function resolvePaths(cfg: CompanionConfig) {
     addonsDir,
     liveFile: cfg.liveFile ?? join(addonsDir, "T3Bridge_Live", "live.lua"),
     inboxFile: cfg.inboxFile ?? join(addonsDir, "T3Bridge", "Inbox.lua"),
+    imageSlotsDir: cfg.images?.slotsDir ?? join(addonsDir, "T3Bridge_Img"),
   };
 }

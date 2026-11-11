@@ -3,7 +3,7 @@
 // exercised without T3 Code.
 import { EventEmitter } from "node:events";
 import { buildModelSelection, type T3Client } from "./client.js";
-import type { ChatMessage, ModelChoice, PendingRequest, ProjectSummary, ProviderSummary, ThreadDetail, ThreadSummary } from "./types.js";
+import type { AttachmentInput, ChatMessage, ImageRef, ModelChoice, PendingRequest, ProjectSummary, ProviderSummary, ThreadDetail, ThreadSummary } from "./types.js";
 
 interface FakeThread { summary: ThreadSummary; messages: ChatMessage[]; pending: PendingRequest | null; streaming: boolean; nextRun: number; options?: { id: string; value: unknown }[] }
 
@@ -117,12 +117,38 @@ export class FakeT3Client extends EventEmitter implements T3Client {
     this.timers.add(h);
   }
 
-  async sendMessage(threadId: string, text: string, key?: string): Promise<void> {
-    this.calls.push({ method: "sendMessage", args: [threadId, text, key] });
+  /** Uploaded images (id -> bytes); fetchAttachment serves these and `attachmentBytes`. */
+  readonly uploads = new Map<string, Buffer>();
+  readonly attachmentBytes = new Map<string, Buffer>();
+  private uploadCounter = 0;
+
+  async uploadImage(bytes: Buffer, name: string, mimeType: string): Promise<AttachmentInput> {
+    this.calls.push({ method: "uploadImage", args: [name, mimeType, bytes.length] });
+    const id = `pending-${String(++this.uploadCounter).padStart(8, "0")}-0000-4000-8000-000000000000`;
+    this.uploads.set(id, Buffer.from(bytes));
+    return { type: "image", id, name, mimeType, sizeBytes: bytes.length };
+  }
+
+  async fetchAttachment(ref: ImageRef): Promise<Buffer> {
+    this.calls.push({ method: "fetchAttachment", args: [ref.id] });
+    const b = this.attachmentBytes.get(ref.id) ?? this.uploads.get(ref.id);
+    if (!b) throw new Error("attachment not found");
+    return b;
+  }
+
+  async sendMessage(threadId: string, text: string, key?: string, attachments: AttachmentInput[] = []): Promise<void> {
+    this.calls.push({ method: "sendMessage", args: attachments.length ? [threadId, text, key, attachments] : [threadId, text, key] });
     const t = this.get(threadId);
     const now = Math.floor(Date.now() / 1000);
     const run = t.nextRun++;
-    t.messages.push({ i: (run - 1) * 100_000 + 1, role: "u", ts: now, text, streaming: false });
+    // Like T3, a claimed upload gets a final id; the fake keeps serving the same bytes under it.
+    const images: ImageRef[] = attachments.map((a, k) => {
+      const id = `${threadId.replace(/[^A-Za-z0-9_-]/g, "")}-${String(run).padStart(4, "0")}${k}`;
+      const b = this.uploads.get(a.id);
+      if (b) this.attachmentBytes.set(id, b);
+      return { id, name: a.name, mimeType: a.mimeType, sizeBytes: a.sizeBytes };
+    });
+    t.messages.push({ i: (run - 1) * 100_000 + 1, role: "u", ts: now, text, streaming: false, ...(images.length ? { images } : {}) });
     const reply: ChatMessage = { i: (run - 1) * 100_000 + 2, role: "a", ts: now, text: "", streaming: true };
     t.messages.push(reply);
     t.streaming = true;

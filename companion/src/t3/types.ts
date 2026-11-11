@@ -46,6 +46,12 @@ export interface ProviderSummary {
 
 export type Role = "u" | "a" | "t" | "s";
 
+/** An image attached to a T3 message (user_message.attachments[] with type "image"; VERIFIED live). */
+export interface ImageRef { id: string; name: string; mimeType: string; sizeBytes: number }
+
+/** An attachment for message.dispatch (an uploaded image: `attachments.createUploadUrl` id). */
+export interface AttachmentInput { type: "image"; id: string; name: string; mimeType: string; sizeBytes: number }
+
 export interface ChatMessage {
   /** Stable, monotonic message index (derived from T3 turn-item ordinals). */
   i: number;
@@ -55,6 +61,8 @@ export interface ChatMessage {
   /** Markdown-ish text. */
   text: string;
   streaming: boolean;
+  /** Image attachments (user messages). */
+  images?: ImageRef[];
 }
 
 export interface PendingOption { id: string; label: string }

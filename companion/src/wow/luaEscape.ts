@@ -4,6 +4,12 @@
 
 export interface LuaOptions { asciiOnly?: boolean }
 
+/**
+ * Named fields for a mixed Lua table. As the LAST element of an array, `["img", "alt", new LuaFields({s: 3})]`
+ * serializes to `{"img","alt",s=3}` (PROTOCOL rev 1.3 image segments).
+ */
+export class LuaFields { constructor(readonly fields: Record<string, unknown>) {} }
+
 const ESC: Record<number, string> = { 0x5c: "\\\\", 0x22: '\\"', 0x0a: "\\n", 0x0d: "\\r", 0x09: "\\t" };
 
 function ddd(b: number): string { return "\\" + String(b).padStart(3, "0"); }
@@ -52,7 +58,15 @@ export function toLua(v: unknown, o: LuaOptions = {}): string {
   if (typeof v === "string") return luaString(v, o);
   if (typeof v === "number") return luaNumber(v);
   if (typeof v === "boolean") return v ? "true" : "false";
-  if (Array.isArray(v)) return "{" + v.map((x) => toLua(x, o)).join(",") + "}";
+  if (Array.isArray(v)) {
+    const last = v[v.length - 1];
+    if (last instanceof LuaFields) {
+      const items = v.slice(0, -1).map((x) => toLua(x, o));
+      for (const [k, x] of Object.entries(last.fields)) if (x !== undefined && x !== null) items.push(`${luaKey(k)}=${toLua(x, o)}`);
+      return "{" + items.join(",") + "}";
+    }
+    return "{" + v.map((x) => toLua(x, o)).join(",") + "}";
+  }
   if (typeof v === "object") {
     const parts: string[] = [];
     for (const [k, x] of Object.entries(v as Record<string, unknown>)) {

@@ -1,6 +1,6 @@
 {
   "name": "t3bridge-companion",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "T3Bridge companion: bridges T3 Code threads to the T3Bridge WoW addon (live.lua inbound, screen-matrix outbound).",
   "type": "module",

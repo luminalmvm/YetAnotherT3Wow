@@ -5,7 +5,7 @@ import { randomUUID } from "node:crypto";
 import { EventEmitter } from "node:events";
 import { log } from "../log.js";
 import { buildPending, isActiveStatus, itemsToMessages, providersFromConfig, resolveEffort, selectionOptions, shellThreadToSummary, withEffort } from "./project.js";
-import type { ModelChoice, PendingRequest, ProjectSummary, ProviderSummary, ThreadDetail, ThreadSummary } from "./types.js";
+import type { AttachmentInput, ImageRef, ModelChoice, PendingRequest, ProjectSummary, ProviderSummary, ThreadDetail, ThreadSummary } from "./types.js";
 import { RpcSocket } from "./wsRpc.js";
 
 export interface T3Client {
@@ -23,7 +23,18 @@ export interface T3Client {
   focusDetail(): ThreadDetail | null;
   /** Loads older history for the focused thread until `count` more messages before index `beforeIndex` exist (or none remain). */
   loadOlder(threadId: string, beforeIndex: number, count: number): Promise<void>;
-  sendMessage(threadId: string, text: string, idempotencyKey?: string): Promise<void>;
+  sendMessage(threadId: string, text: string, idempotencyKey?: string, attachments?: AttachmentInput[]): Promise<void>;
+  /**
+   * Uploads an image for a later message.dispatch (VERIFIED live, T3 0.1.8): WS `attachments.createUploadUrl`
+   * {type:"image", name, mimeType, sizeBytes} -> {attachmentId:"pending-<uuid>", relativeUrl, expiresAt (10 min)},
+   * then POST the exact bytes to <origin><relativeUrl> (a signed URL; no bearer needed) -> 204.
+   */
+  uploadImage(bytes: Buffer, name: string, mimeType: string): Promise<AttachmentInput>;
+  /**
+   * Bytes of a message attachment (VERIFIED live): WS `assets.createUrl` {resource:{_tag:"attachment", attachmentId}}
+   * -> {relativeUrl (signed, 1 h), imageDimensions?}, then GET <origin><relativeUrl>.
+   */
+  fetchAttachment(ref: ImageRef): Promise<Buffer>;
   /**
    * Set the thread's model (and optionally its reasoning effort), keeping every other model option.
    * If the effort (given, or the thread's current one) is not offered by the model, the model's default is used.
@@ -312,7 +323,7 @@ export class RpcT3Client extends EventEmitter implements T3Client {
     return Number(r?.sequence ?? 0);
   }
 
-  async sendMessage(threadId: string, text: string, idempotencyKey?: string): Promise<void> {
+  async sendMessage(threadId: string, text: string, idempotencyKey?: string, attachments: AttachmentInput[] = []): Promise<void> {
     if (idempotencyKey) {
       const now = Date.now();
       for (const [k, t] of this.sentKeys) if (now - t > 3_600_000) this.sentKeys.delete(k);
@@ -325,12 +336,35 @@ export class RpcT3Client extends EventEmitter implements T3Client {
       threadId,
       messageId: commandId,
       text,
-      attachments: [],
+      attachments: attachments.map((a) => ({ type: "image", id: a.id, name: a.name, mimeType: a.mimeType, sizeBytes: a.sizeBytes })),
       createdBy: "user",
       creationSource: "web",
       dispatchMode: { type: "queue_after_active" },
     });
     if (idempotencyKey) this.sentKeys.set(`${threadId}:${idempotencyKey}`, Date.now());
+  }
+
+  async uploadImage(bytes: Buffer, name: string, mimeType: string): Promise<AttachmentInput> {
+    if (!this.sock?.isOpen) throw new Error("not connected to T3");
+    const r: any = await this.sock.request("attachments.createUploadUrl", { type: "image", name, mimeType, sizeBytes: bytes.length }, 15000);
+    const id = String(r?.attachmentId ?? "");
+    const rel = String(r?.relativeUrl ?? "");
+    if (!id || !rel.startsWith("/api/attachments/upload/")) throw new Error("unexpected upload URL from T3");
+    const res = await fetch(new URL(rel, this.o.origin), { method: "POST", body: new Uint8Array(bytes), headers: { "content-type": mimeType }, signal: AbortSignal.timeout(30000) });
+    if (res.status !== 204 && !res.ok) throw new Error(`image upload: HTTP ${res.status}`);
+    return { type: "image", id, name, mimeType, sizeBytes: bytes.length };
+  }
+
+  async fetchAttachment(ref: ImageRef): Promise<Buffer> {
+    if (!this.sock?.isOpen) throw new Error("not connected to T3");
+    const r: any = await this.sock.request("assets.createUrl", { resource: { _tag: "attachment", attachmentId: ref.id } }, 15000);
+    const rel = String(r?.relativeUrl ?? "");
+    if (!rel.startsWith("/api/assets/")) throw new Error("unexpected asset URL from T3");
+    const res = await fetch(new URL(rel, this.o.origin), { signal: AbortSignal.timeout(30000) });
+    if (!res.ok) throw new Error(`attachment: HTTP ${res.status}`);
+    const len = Number(res.headers.get("content-length") ?? 0);
+    if (len > 20 * 1024 * 1024) throw new Error("attachment too large");
+    return Buffer.from(await res.arrayBuffer());
   }
 
   async setModel(threadId: string, modelId: string, effort?: string): Promise<void> {

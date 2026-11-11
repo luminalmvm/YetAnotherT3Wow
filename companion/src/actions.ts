@@ -4,6 +4,7 @@ import type { Command } from "./wow/frameCodec.js";
 import type { T3Client } from "./t3/client.js";
 import type { RidMap, TidMap } from "./model/snapshot.js";
 import type { ThreadDetail } from "./t3/types.js";
+import type { ImageManager } from "./images/manager.js";
 import { log } from "./log.js";
 
 export class ActionError extends Error {}
@@ -19,6 +20,8 @@ export interface ActionContext {
   /** Override for tests. */
   openUrl?: (url: string) => void;
   onHello?: (c: Extract<Command, { kind: "hello" }>) => void;
+  /** Image support (PROTOCOL rev 1.3); absent = images unavailable. */
+  images?: ImageManager;
 }
 
 function threadIdFor(ctx: ActionContext, tid: string): string {
@@ -83,8 +86,15 @@ export async function executeCommand(ctx: ActionContext, cmd: Command): Promise<
     }
     case "send": {
       const id = threadIdFor(ctx, cmd.tid);
-      if (!cmd.text.trim()) throw new ActionError("Empty message");
-      await ctx.t3.sendMessage(id, cmd.text, cmd.clientMsgId);
+      // Staged images (D17) go with this message; a message may then have no text.
+      const staged = ctx.images?.stagedFor(cmd.tid).length ?? 0;
+      if (!cmd.text.trim() && !staged) throw new ActionError("Empty message");
+      if (!staged) { await ctx.t3.sendMessage(id, cmd.text, cmd.clientMsgId); return; }
+      let prepared;
+      try { prepared = await ctx.images!.prepareSend(cmd.tid, id); }
+      catch (e) { throw new ActionError(`Image upload failed: ${(e as Error).message}`.slice(0, 120)); }
+      await ctx.t3.sendMessage(id, cmd.text, cmd.clientMsgId, prepared.attachments);
+      prepared.commit();
       return;
     }
     case "model": {
@@ -118,6 +128,22 @@ export async function executeCommand(ctx: ActionContext, cmd: Command): Promise<
       const windowCount = msgs.filter((m) => m.i >= start).length;
       if (windowCount > ctx.caps.maxFocusWindow) { log.info("hist ignored: focus window at its 120-message cap"); return; }
       ctx.focus.windowStart = start;
+      return;
+    }
+    case "clip": {
+      threadIdFor(ctx, cmd.tid);
+      if (!ctx.images) { if (!cmd.quiet) throw new ActionError("Images are not available"); return; }
+      await ctx.images.clip(cmd.tid, cmd.quiet);
+      return;
+    }
+    case "shot": {
+      threadIdFor(ctx, cmd.tid);
+      if (!ctx.images) throw new ActionError("Images are not available");
+      await ctx.images.shot(cmd.tid);
+      return;
+    }
+    case "unstage": {
+      ctx.images?.unstage(cmd.tid, cmd.aid);
       return;
     }
     case "open": {

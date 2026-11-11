@@ -117,14 +117,18 @@ export function cellStrings(frame: Uint8Array, rows: number): string[] {
 // ---------------------------------------------------------------------------------------------
 
 export type Command =
-  | { kind: "hello"; proto?: string; addonVersion?: string; cell?: string; rows?: string }
+  | { kind: "hello"; proto?: string; addonVersion?: string; cell?: string; rows?: string; img?: string }
   | { kind: "focus"; tid: string }
   | { kind: "send"; tid: string; clientMsgId: string; text: string }
   | { kind: "model"; tid: string; modelId: string; effort?: string }
   | { kind: "intr"; tid: string }
   | { kind: "ans"; tid: string; rid: string; answer: string }
   | { kind: "hist"; tid: string; beforeIndex: number }
-  | { kind: "open"; tid?: string };
+  | { kind: "open"; tid?: string }
+  // PROTOCOL rev 1.3 (D17): image attachments.
+  | { kind: "clip"; tid: string; quiet: boolean }
+  | { kind: "shot"; tid: string }
+  | { kind: "unstage"; tid: string; aid: string };
 
 /** Splits on TAB; the last field of send/ans keeps any further tabs/newlines (split at most 3 times). */
 export function splitFields(payload: string): string[] {
@@ -146,12 +150,13 @@ export function splitFields(payload: string): string[] {
 const TID = /^[A-Za-z0-9_-]{1,40}$/;
 const ID64 = /^[A-Za-z0-9_.:/-]{1,64}$/;
 const OPT = /^[A-Za-z0-9_.:-]{1,32}$/;
+const AID = /^[A-Za-z0-9_-]{1,16}$/;
 
 export function parseCommand(payload: string): { ok: true; cmd: Command } | { ok: false; reason: string } {
   const f = splitFields(payload);
   const need = (n: number) => f.length >= n;
   switch (f[0]) {
-    case "hello": return { ok: true, cmd: { kind: "hello", proto: f[1], addonVersion: f[2], cell: f[3], rows: f[4] } };
+    case "hello": return { ok: true, cmd: { kind: "hello", proto: f[1], addonVersion: f[2], cell: f[3], rows: f[4], ...(f[5] !== undefined ? { img: f[5] } : {}) } };
     case "focus": return need(2) && TID.test(f[1]) ? { ok: true, cmd: { kind: "focus", tid: f[1] } } : { ok: false, reason: "focus: bad tid" };
     case "send": return need(4) && TID.test(f[1]) && f[2].length > 0 ? { ok: true, cmd: { kind: "send", tid: f[1], clientMsgId: f[2], text: f[3] } } : { ok: false, reason: "send: bad fields" };
     case "model": {
@@ -168,6 +173,9 @@ export function parseCommand(payload: string): { ok: true; cmd: Command } | { ok
       return need(3) && TID.test(f[1]) && Number.isInteger(n) && n >= 0 ? { ok: true, cmd: { kind: "hist", tid: f[1], beforeIndex: n } } : { ok: false, reason: "hist: bad fields" };
     }
     case "open": return { ok: true, cmd: { kind: "open", tid: f[1] && TID.test(f[1]) ? f[1] : undefined } };
+    case "clip": return need(2) && TID.test(f[1]) ? { ok: true, cmd: { kind: "clip", tid: f[1], quiet: f[2] === "1" } } : { ok: false, reason: "clip: bad tid" };
+    case "shot": return need(2) && TID.test(f[1]) ? { ok: true, cmd: { kind: "shot", tid: f[1] } } : { ok: false, reason: "shot: bad tid" };
+    case "unstage": return need(3) && TID.test(f[1]) && AID.test(f[2]) ? { ok: true, cmd: { kind: "unstage", tid: f[1], aid: f[2] } } : { ok: false, reason: "unstage: bad fields" };
     default: return { ok: false, reason: `unknown command ${JSON.stringify((f[0] ?? "").slice(0, 16))}` };
   }
 }
