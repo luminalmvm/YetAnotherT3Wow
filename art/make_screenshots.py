@@ -14,8 +14,9 @@ Crops (coordinates in the 2000x1125 source):
 
 Masks (pixelated with large blocks so the text cannot be read at any zoom):
     always           the file path in the chat window's "Tool" line (it contains a local user name)
-    --mask-titles    the four tracker rows whose titles start with "Pro:" (rows 8 to 11); every
-                     other title, the header, status icons and timers stay visible
+    --mask-titles    every tracker title except the first row (rows 2 to 14); the header
+                     ("T3 Code  1 running"), the first row, status icons, collapse buttons and
+                     timers stay visible
 
 Needs Pillow (pip install pillow).
 """
@@ -38,8 +39,10 @@ ALWAYS_MASK = [
     ("chat path line", (630, 432, 1208, 456), 8),
 ]
 TITLE_MASK = [
-    # Text of row 7 ends at y=942 and row 12 starts at y=1001, so this box holds rows 8..11 only.
-    ("tracker 'Pro:' titles, rows 8..11", (1767, 945, 1960, 998), 7),
+    # Row 1's text ends at y=863 and row 2 starts at y=868; the last row ends at y=1022. Titles start
+    # at x=1768 (status icons end before 1767) and the longest title's "..." ends before x=1961,
+    # while the timers start at x=1967.
+    ("tracker titles, rows 2..14", (1767, 865, 1961, 1026), 7),
 ]
 
 MAX_BYTES = 400 * 1024
