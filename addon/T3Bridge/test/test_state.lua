@@ -446,3 +446,123 @@ T.test("status line: 'Images: N left' below 20 slots, notice wins for a moment",
   T.ok(not S.LinkStatus(st, NOW, { slotsLeft = 100, slotsTotal = 200 }):find("Images"))
   T.eq(S.LinkStatus(st, NOW, { slotsLeft = 100, slotsTotal = 200, notice = "No image on the clipboard" }), "No image on the clipboard")
 end)
+
+---------------------------------------------------------------------------------------------
+-- rev 1.4: subagent threads
+---------------------------------------------------------------------------------------------
+T.test("subagents (rev 1.4): fixture subs, focus.kids, thread links", function()
+  local raw, rend = T.loadSnapshot(FIXTURE)
+  local s = assert(S.Validate(raw, rend))
+  T.eq(#s.threads, 7, "subagents are not top-level rows")
+  T.eq(#s.subs, 5)
+  T.eq(s.threads[2].kids, 3); T.eq(s.threads[2].kidsRunning, 1); T.eq(s.threads[1].kids, 2)
+  T.eq(s.subs[1].parent, "b2c3d4e5")
+  T.eq(#s.focus.kids, 2); T.eq(s.focus.nkids, 2); T.eq(s.focus.kids[1].parent, "a1b2c3d4")
+  local links = {}
+  for _, m in ipairs(s.focus.msgs) do
+    for _, sg in ipairs(m.segs) do if sg[1] == "tl" then links[#links + 1] = sg end end
+  end
+  T.eq(#links, 2, "two thread links")
+  T.eq(links[1].id, "c2d3e4f5")
+  T.ok(links[1][2]:find("^Delegated task"), links[1][2])
+end)
+
+T.test("subagents: a thread with parent moves to subs; bad fields are dropped", function()
+  local raw = snap(1, {
+    threads = {
+      { id = "p1", title = "Parent", st = "completed", kids = 2, kidsRunning = 1, kidsNeed = -3 },
+      { id = "c1", title = "Child", st = "running", parent = "p1" },
+      { id = "self", title = "Loop", st = "idle", parent = "self" },
+    },
+    subs = {
+      { id = "c2", title = "Child 2", st = "completed", parent = "p1" },
+      { id = "c1", title = "dup", st = "idle", parent = "p1" },
+      { id = "x", title = "no parent", st = "idle" },
+    },
+    focus = { id = "c1", parent = { id = "p1", title = "Parent" },
+      path = { { id = "p1", title = "Parent" }, { id = "c1", title = "Child" } },
+      kids = { { id = "g1", title = "Grandchild", st = "running" }, { id = "c1", title = "itself" } }, nkids = 1,
+      msgs = { { i = 1, r = "s", segs = { { "tl", "Open", id = "g1" }, { "tl", "bad id", id = "a b" }, { "tl", "", id = "g1" } } } } },
+  })
+  local s = assert(S.Validate(raw, 1))
+  T.eq(#s.threads, 2, "p1 and the self-parented thread (parent dropped)")
+  T.eq(s.threads[2].parent, nil)
+  T.eq(s.threads[1].kidsNeed, nil, "negative count dropped")
+  T.eq(#s.subs, 2); T.eq(s.subs[1].id, "c1"); T.eq(s.subs[2].id, "c2")
+  T.eq(#s.focus.kids, 1, "the focused thread is not its own kid")
+  T.eq(s.focus.kids[1].parent, "c1")
+  T.eq(s.focus.parent.id, "p1")
+  T.eq(#s.focus.path, 2)
+  local segs = s.focus.msgs[1].segs
+  T.eq(segs[1][1], "tl"); T.eq(segs[1].id, "g1")
+  T.eq(segs[2][1], "p", "a link with a bad id renders as text")
+  T.eq(#segs, 2, "empty link dropped")
+  -- a breadcrumb that does not end at the focused thread is ignored
+  local bad = snap(2, { focus = { id = "c1", path = { { id = "p1", title = "P" }, { id = "zz", title = "Z" } }, msgs = {} } })
+  T.eq(S.Validate(bad, 2).focus.path, nil)
+end)
+
+T.test("subagents: Thread, ParentOf, Kids, Path, KidCounts, KidsLabel", function()
+  local st = S.New()
+  S.Accept(st, snap(1, {
+    threads = { { id = "p1", title = "Parent", st = "completed", kids = 3 }, { id = "c1", title = "Child", st = "running", parent = "p1" } },
+    subs = { { id = "c2", title = "Child 2", st = "completed", parent = "p1", need = "input" }, { id = "g1", title = "Grand", st = "idle", parent = "c1" } },
+    focus = { id = "c1", parent = { id = "p1", title = "Parent" }, path = { { id = "p1", title = "Parent" }, { id = "c1", title = "Child" } },
+      kids = { { id = "g1", title = "Grand", st = "running" }, { id = "g2", title = "Grand 2", st = "completed" } }, nkids = 5, msgs = {} },
+  }), 1, NOW)
+  T.eq(S.Thread(st, "c1").parent, "p1")
+  T.eq(S.Thread(st, "g2").title, "Grand 2", "found through focus.kids")
+  T.eq(S.ParentOf(st, "c1"), "p1"); T.eq(S.ParentOf(st, "p1"), nil); T.eq(S.ParentOf(st, "g1"), "c1")
+  local kids, total = S.Kids(st, "c1")
+  T.eq(#kids, 2); T.eq(total, 5, "focus.nkids")
+  kids, total = S.Kids(st, "p1")
+  T.eq(#kids, 2, "subs naming p1 (c1 from threads moved to subs, c2)"); T.eq(total, 3, "the row's kids count")
+  local path = S.Path(st, "c1")
+  T.eq(#path, 2); T.eq(path[1].id, "p1")
+  path = S.Path(st, "g1")
+  T.eq(#path, 3, "walked up through parent links"); T.eq(path[3].id, "g1")
+  local n = S.KidCounts(S.Kids(st, "p1"))
+  T.eq(n.running, 1); T.eq(n.needs, 1)
+  T.eq(S.KidsLabel(3, 1, 1), "Subagents (3" .. S.DOT .. "1 running" .. S.DOT .. "1 needs you)")
+  T.eq(S.KidsLabel(2, 0, 0), "Subagents (2)")
+end)
+
+T.test("subagents: parent links are remembered across snapshots and companion restarts", function()
+  local st = S.New()
+  S.Accept(st, snap(1, {
+    threads = { { id = "p1", title = "Parent", st = "completed" }, { id = "c1", title = "Child", st = "idle", parent = "p1" } },
+    focus = { id = "c1", parent = { id = "p1", title = "Parent" }, path = { { id = "p1", title = "Parent" }, { id = "c1", title = "Child" } }, msgs = {} },
+  }), 1, NOW)
+  -- a new companion (new sid) that does not list c1 yet
+  S.Accept(st, { v = 1, sid = "new1", seq = 1, ts = NOW, ack = 0, asid = "", threads = { { id = "p1", title = "Parent", st = "completed" } } }, 1, NOW)
+  T.eq(S.Thread(st, "c1"), nil)
+  T.eq(S.ParentOf(st, "c1"), "p1", "remembered parent")
+  local path = S.Path(st, "c1")
+  T.eq(#path, 2); T.eq(path[1].id, "p1"); T.eq(path[2].title, "Child")
+  T.ok(S.Known(st, "c1"))
+  T.eq(S.ParentOf(st, "p1"), nil, "top-level stays top-level")
+end)
+
+T.test("subagents: thread menu indents kids, tracker rows stay top-level, attention and cadence", function()
+  local st = S.New()
+  S.Accept(st, snap(1, {
+    threads = { { id = "p1", title = "Parent", st = "completed", kids = 2, kidsRunning = 1 }, { id = "q1", title = "Other", st = "idle" } },
+    subs = { { id = "c1", title = "Child", st = "running", parent = "p1" }, { id = "c2", title = "Child 2", st = "completed", parent = "p1" },
+      { id = "g1", title = "Grand", st = "idle", parent = "c1" } },
+  }), 1, NOW)
+  local rows, total = S.TrackerRows(st, NOW, nil, {})
+  T.eq(total, 2, "only top-level rows")
+  for _, r in ipairs(rows) do T.ok(not r.t.parent) end
+  local menu = S.ThreadMenu(st)
+  local flat = {}
+  for _, g in ipairs(menu) do for _, it in ipairs(g.items) do flat[#flat + 1] = it.t.id .. ":" .. it.depth end end
+  T.eq(table.concat(flat, ","), "p1:0,c1:1,g1:2,c2:1,q1:0")
+  T.ok(S.AnyActive(st), "a running subagent keeps the 3 s cadence")
+  -- a subagent needing you: the parent's attention signature changes, a collapsed row expands
+  local collapsed = {}
+  S.SetCollapsed(collapsed, S.Thread(st, "p1"), true)
+  S.Accept(st, snap(2, { threads = { { id = "p1", title = "Parent", st = "completed", kids = 2, kidsNeed = 1 } } }), 2, NOW)
+  T.ok(S.AnyNeedsYou(st))
+  T.eq(S.ApplyAutoExpand(collapsed, st), 1)
+  T.eq(collapsed.p1, nil)
+end)

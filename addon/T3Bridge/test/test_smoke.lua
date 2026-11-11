@@ -1186,6 +1186,247 @@ T.test("[" .. CONFIG .. "] minimum window size 420x360: input, attach, send and 
   ackImg({ staged = false })
 end)
 
+---------------------------------------------------------------------------------------------
+-- rev 1.4: subagent threads (Up button, breadcrumb, Subagents strip, thread links, menu, tracker)
+---------------------------------------------------------------------------------------------
+local PARENT_TITLE = "Fix flaky login test in auth.spec.ts"
+local CHILD_TITLE = "Check the other login() callers"
+
+--- Snapshot mutation: the companion focuses subagent c1d2e3f4 of a1b2c3d4 (it is listed with parent=).
+local function childFocus(s, extra)
+  local base = s.focus
+  s.threads[#s.threads + 1] = { id = "c1d2e3f4", title = CHILD_TITLE, st = "completed", t0 = 1000, t1 = 1060, parent = "a1b2c3d4" }
+  s.focus = { id = "c1d2e3f4", model = base.model, effort = base.effort, models = base.models, streaming = false,
+    parent = { id = "a1b2c3d4", title = PARENT_TITLE },
+    path = { { id = "a1b2c3d4", title = PARENT_TITLE }, { id = "c1d2e3f4", title = CHILD_TITLE } },
+    msgs = { { i = 1, r = "u", ts = 1000, segs = { { "p", "Find every caller of login()" } }, more = false } } }
+  if extra then extra(s) end
+end
+
+local function subagentPieces() return ns.UI.ChatSubagents() end
+
+local function linkButton(tid)
+  for _, fr in ipairs(M.frames) do
+    if fr._otype == "Button" and fr._shown and fr.tid == tid and fr.line then return fr end
+  end
+end
+
+T.test("[" .. CONFIG .. "] subagents: strip lists the kids, a click opens one, Up and the breadcrumb lead back", function()
+  ns.UI.OpenChat("a1b2c3d4")
+  settle()
+  T.eq(ns.selected, "a1b2c3d4")
+  local up, crumb, crumbBtns, kids, kidRows, head = subagentPieces()
+  T.ok(not up:IsShown(), "no Up button on a top-level thread")
+  T.ok(not crumb:IsShown(), "no breadcrumb on a top-level thread")
+  T.ok(kids:IsShown(), "Subagents strip shown")
+  T.eq(head.text:GetText(), "Subagents (2)")
+  T.ok(not (kidRows[1] and kidRows[1]:IsShown()), "collapsed by default")
+  head:Click()
+  T.eq(T3BridgeDB.chat.kidsOpen, true)
+  T.ok(kidRows[1]:IsShown() and kidRows[2]:IsShown(), "two subagent rows")
+  T.eq(kidRows[1].title:GetText(), CHILD_TITLE)
+  T.eq(kidRows[1].icon._texture, ns.State.STATUS.completed.icon, "tracker icon for done")
+  local _, insetRel, _, _, insetY = ns.UI.ChatView().scroll:GetParent():GetPoint(1)
+  T.ok(insetY < -64, "history starts below the strip: " .. tostring(insetY))
+  -- click a subagent: the chat switches to it and asks the companion to focus it
+  kidRows[1]:Click()
+  T.eq(ns.selected, "c1d2e3f4")
+  settle(childFocus)
+  T.eq(ns.state.snap.focus.id, "c1d2e3f4")
+  T.ok(up:IsShown(), "Up button shown on a subagent")
+  T.ok(crumb:IsShown(), "breadcrumb shown")
+  T.eq(crumbBtns[1].tid, "a1b2c3d4"); T.eq(crumbBtns[2].tid, "c1d2e3f4")
+  T.ok(crumbBtns[1].text:GetText():find("Fix flaky", 1, true))
+  T.ok(not kids:IsShown(), "no strip: the subagent has no kids")
+  local tdd = ns.UI.ChatTopBar()
+  local _, _, _, ddx = tdd.frame:GetPoint(1)
+  local diag = ns.UI.ChatDiagnostics()
+  local left = (diag == "PortraitFrameTemplate") and 60 or ((diag == "BasicFrameTemplateWithInset") and 12 or 16)
+  T.eq(ddx, left + 26 - (tdd.modern and 0 or 16), "thread dropdown moved right of the Up button")
+  T.ok(ns.State.Thread(ns.state, "c1d2e3f4"), "the focused subagent is listed")
+  T.eq(#ns.state.snap.threads, 7, "but not as a top-level tracker row")
+  -- breadcrumb: the parent segment opens the parent
+  crumbBtns[1]:Click()
+  T.eq(ns.selected, "a1b2c3d4")
+  settle()
+  T.ok(not up:IsShown())
+  -- Up button and /t3 up
+  ns.SelectThread("c1d2e3f4")
+  settle(childFocus)
+  up:Click()
+  T.eq(ns.selected, "a1b2c3d4", "Up = focus the parent")
+  settle()
+  M.chat = {}
+  SlashCmdList.T3BRIDGE("up")
+  T.ok(chatHas("not a subagent"), "/t3 up on a top-level thread explains")
+  ns.SelectThread("c1d2e3f4")
+  settle(childFocus)
+  SlashCmdList.T3BRIDGE("up")
+  T.eq(ns.selected, "a1b2c3d4", "/t3 up")
+  settle()
+  T3BridgeDB.chat.kidsOpen = nil
+end)
+
+T.test("[" .. CONFIG .. "] thread links: tl segments render link-coloured; click opens that thread", function()
+  ns.UI.OpenChat("a1b2c3d4")
+  settle()
+  local b = linkButton("c2d3e4f5")
+  T.ok(b, "link button for the 'Delegated task ... finished' line")
+  T.ok(b.text:GetText():find("Delegated task", 1, true), b.text:GetText())
+  T.ok(b.text:GetText():find("^\194\187 "), "starts with the link arrow")
+  local c = ns.UI.Messages.LINK_COLOR
+  T.eq(b.text._textColor and b.text._textColor[1], c[1], "link colour")
+  b._scripts.OnEnter(b)
+  T.ok(b.line:IsShown(), "hover underline")
+  b._scripts.OnLeave(b)
+  T.ok(not b.line:IsShown())
+  T.ok(linkButton("c1d2e3f4"), "subagent link inside a tool message")
+  b:Click()
+  T.eq(ns.selected, "c2d3e4f5", "click opened the linked thread")
+  settle(function(s)
+    childFocus(s, function(x)
+      x.threads[#x.threads].id, x.threads[#x.threads].title = "c2d3e4f5", "Write the regression test"
+      x.focus.id = "c2d3e4f5"
+      x.focus.path[2] = { id = "c2d3e4f5", title = "Write the regression test" }
+    end)
+  end)
+  T.ok((ns.UI.ChatSubagents()):IsShown(), "Up button")
+  ns.UI.Chat.Up()
+  T.eq(ns.selected, "a1b2c3d4")
+  settle()
+end)
+
+T.test("[" .. CONFIG .. "] thread menu: subagents are indented under their parent", function()
+  ns.UI.OpenChat("a1b2c3d4")
+  settle()
+  local items = ns.State.ThreadMenu(ns.state)
+  local seen = {}
+  for _, g in ipairs(items) do for _, it in ipairs(g.items) do seen[it.t.id] = it.depth end end
+  T.eq(seen.a1b2c3d4, 0); T.eq(seen.c1d2e3f4, 1, "kid of the focused thread"); T.eq(seen.d1e2f3a4, 1, "kid from subs")
+  local label = ns.UI.Chat.ThreadLabel(ns.State.Thread(ns.state, "d1e2f3a4"), 1)
+  T.ok(label:find(" - |r", 1, true), "ASCII indent marker: " .. label)
+  T.ok(not label:find("\226\134\179", 1, true), "no U+21B3 arrow (missing from WoW fonts)")
+  if CONFIG == "modern" then
+    local tdd = ns.UI.ChatTopBar()
+    local rs = radios(tdd.frame)
+    local idx = {}
+    for k, r in ipairs(rs) do idx[r.data] = k end
+    T.ok(idx.c1d2e3f4 == idx.a1b2c3d4 + 1, "kid right under its parent")
+    T.ok(idx.d1e2f3a4 > idx.b2c3d4e5, "subs under their parent")
+    rs[idx.d1e2f3a4].onSel()
+    T.eq(ns.selected, "d1e2f3a4")
+    settle()
+    ns.UI.OpenChat("a1b2c3d4")
+    settle()
+  end
+end)
+
+T.test("[" .. CONFIG .. "] tracker: subagent badge, badge lists child rows, child row opens, needs-you expands", function()
+  local TR = ns.UI.Tracker
+  applyFixture()
+  T.eq(TR.shown, 7, "kids collapsed by default")
+  local row = trackerRowFor("b2c3d4e5")
+  T.ok(row.kidsBtn:IsShown(), "badge on a row with subagents")
+  T.eq(row.kidsBtn.text:GetText(), "1 running")
+  T.eq(trackerRowFor("a1b2c3d4").kidsBtn.text:GetText(), "+2")
+  T.ok(not trackerRowFor("c3d4e5f6").kidsBtn:IsShown(), "no badge without subagents")
+  row.kidsBtn:Click()
+  T.eq(T3BridgeDB.tracker.kids.b2c3d4e5, true, "saved by thread id")
+  T.eq(TR.shown, 10, "three child rows")
+  local kid = trackerRowFor("d1e2f3a4")
+  T.ok(kid and kid.child, "child row")
+  T.eq(select(4, kid:GetPoint(1)), 14, "indented")
+  T.ok(not kid.toggle:IsShown(), "no collapse toggle on a child row")
+  T.eq(kid.icon._texture, ns.State.STATUS.running.icon)
+  T.eq(trackerRowFor("d3e4f5a6").icon._texture, ns.State.STATUS.failed.icon)
+  kid:Click("LeftButton")
+  T.eq(ns.selected, "d1e2f3a4", "child row opens the subagent")
+  settle()
+  -- collapsing the parent row hides its kids
+  trackerRowFor("b2c3d4e5"):Click("RightButton")
+  T.eq(trackerRowFor("d1e2f3a4"), nil, "hidden under a collapsed row")
+  trackerRowFor("b2c3d4e5").toggle:Click()
+  trackerRowFor("b2c3d4e5").kidsBtn:Click()
+  T.eq(T3BridgeDB.tracker.kids.b2c3d4e5, nil)
+  T.eq(TR.shown, 7)
+  -- a subagent that needs you shows its row by itself, and the badge says so
+  applyFixture(function(s)
+    s.threads[2].kidsNeed = 1
+    s.subs[1].need = "approval"
+  end)
+  T.eq(trackerRowFor("b2c3d4e5").kidsBtn.text:GetText(), "- 1 needs you")
+  T.ok(trackerRowFor("d1e2f3a4"), "auto-shown")
+  T.ok(trackerRowFor("d1e2f3a4").pulse:IsPlaying(), "needs-you pulse")
+  applyFixture()
+  T.eq(TR.shown, 7)
+end)
+
+T.test("[" .. CONFIG .. "] subagents at the minimum window size 420x360: breadcrumb truncates, strip fits", function()
+  local C = ns.UI.Chat
+  -- pure breadcrumb fit
+  local w = C.FitCrumbs({ 300, 280, 260 }, 14, 340, 30)
+  local sum = w[1] + w[2] + w[3] + 2 * 14
+  T.ok(sum <= 340, "fits: " .. sum)
+  T.ok(w[3] >= 80, "current thread keeps room: " .. w[3])
+  T.ok(w[1] >= 30 and w[2] >= 30, "ancestors >= 30 px")
+  local same = C.FitCrumbs({ 50, 60 }, 14, 340, 30)
+  T.eq(same[1], 50); T.eq(same[2], 60)
+  T.eq(C.KidRowsFit(360, 16), 3)
+  T.eq(C.KidRowsFit(560, 0), 8)
+  local f = _G.T3BridgeChatFrame
+  f:SetSize(420, 360)
+  T3BridgeDB.chat.kidsOpen = true
+  local long = string.rep("A very long thread title ", 4)
+  local mut = function(s)
+    childFocus(s, function(x)
+      x.focus.path = { { id = "a1b2c3d4", title = long }, { id = "zz000001", title = long }, { id = "c1d2e3f4", title = long } }
+      x.focus.parent = { id = "zz000001", title = long }
+      x.focus.kids, x.focus.nkids = {}, 9
+      for k = 1, 9 do x.focus.kids[k] = { id = string.format("k%07d", k), title = "Kid " .. k, st = (k == 1) and "running" or "completed", t0 = 1000 } end
+    end)
+  end
+  ns.SelectThread("c1d2e3f4")
+  settle(mut)
+  C.Refresh()
+  local up, crumb, crumbBtns, kids, kidRows, head, widths, kidsShown = subagentPieces()
+  T.ok(up:IsShown() and crumb:IsShown() and kids:IsShown())
+  T.eq(#widths, 3)
+  local diag = ns.UI.ChatDiagnostics()
+  local left = (diag == "PortraitFrameTemplate") and 60 or ((diag == "BasicFrameTemplateWithInset") and 12 or 16)
+  local total = widths[1] + widths[2] + widths[3]
+  T.ok(total <= 420 - left - 16, "breadcrumb fits 420 px: " .. total)
+  T.eq(kidsShown, 3, "two kid rows + '7 more...' at 360 px")
+  T.eq(kidRows[3].title:GetText(), "7 more...")
+  T.eq(head.text:GetText(), "Subagents (9" .. ns.State.DOT .. "1 running)")
+  -- the history keeps room between the strip and the input
+  local _, _, _, _, insetY = ns.UI.ChatView().scroll:GetParent():GetPoint(1)
+  local bottomUsed = 6 + 18 + 4 + 60 + 6
+  T.ok(360 + insetY - bottomUsed >= 60, "history keeps >= 60 px: " .. (360 + insetY - bottomUsed))
+  f:SetSize(520, 560)
+  T3BridgeDB.chat.kidsOpen = nil
+  ns.SelectThread("a1b2c3d4")
+  settle()
+end)
+
+T.test("[" .. CONFIG .. "] demo mode: subagent threads, Up and the breadcrumb", function()
+  SlashCmdList.T3BRIDGE("demo")
+  T.eq(ns.demo, true)
+  ns.UI.Tracker.ToggleKids("b2c3d4e5")
+  local kid = trackerRowFor("d1e2f3a4")
+  T.ok(kid, "demo subagent row")
+  kid:Click("LeftButton")
+  T.eq(ns.selected, "d1e2f3a4")
+  local up, crumb, crumbBtns = subagentPieces()
+  T.ok(up:IsShown() and crumb:IsShown(), "Up + breadcrumb in demo")
+  T.eq(crumbBtns[1].tid, "b2c3d4e5")
+  up:Click()
+  T.eq(ns.selected, "b2c3d4e5")
+  T.ok(linkButton("d1e2f3a4"), "demo parent history links its subagents")
+  ns.UI.Tracker.ToggleKids("b2c3d4e5")
+  SlashCmdList.T3BRIDGE("demo")
+  T.eq(ns.demo, false)
+end)
+
 T.test("[" .. CONFIG .. "] saved variables hold no message text", function()
   local function scan(t, depth)
     for k, v in pairs(t) do

@@ -12,6 +12,7 @@ local State = ns.State
 local HELP = {
   "/t3 - open or close the chat window",
   "/t3 demo - sample threads, no companion needed (again to leave)",
+  "/t3 up - from a subagent thread back to its parent (or the Up arrow in the window)",
   "/t3 status - link details",
   "/t3 spike s1 || s1 combat || s2 || fonts || templates || img - in-game checks",
   "Images: Attach button next to Send, or Ctrl+V in the message box after copying an image (e.g. Win+Shift+S)",
@@ -121,6 +122,15 @@ local function handler(msg)
     ns.UI.Tracker.ResetPosition()
     ns.UI.Minimap.Reset()
     ns.Print("Window, tracker and minimap button positions reset.")
+  elseif cmd == "up" then
+    -- rev 1.4: open the parent of the subagent thread shown in the chat window.
+    local tid = ns.selected
+    local parent = tid and State.ParentOf(ns.state, tid)
+    if not parent then
+      ns.Print(tid and "This thread is not a subagent." or "No thread open. /t3 opens the window.")
+    else
+      if not ns.UI.ChatIsOpen() then ns.UI.OpenChat(parent) else ns.UI.Chat.Up() end
+    end
   elseif cmd == "reload" then
     ns.ReloadForLink()
   else

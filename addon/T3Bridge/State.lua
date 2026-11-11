@@ -14,6 +14,9 @@ State.MAX_THREADS = 30        -- PROTOCOL D15 (was 12)
 State.MAX_MSGS = 120
 State.MAX_CACHE = 400
 State.MAX_TRACKER_ROWS = 16   -- upper bound; the tracker also fits rows to the space on screen
+State.MAX_SUBS = 64           -- subagent rows (rev 1.4: subs + subagents listed in threads)
+State.MAX_KIDS = 20           -- focus.kids (rev 1.4)
+State.MAX_PATH = 4            -- focus.path (rev 1.4)
 State.NOT_RESPONDING_SHOW = 30 -- seconds the "not responding" status stays up
 
 local function codec() return ns.Codec end
@@ -91,6 +94,10 @@ local function normMsg(m)
             segs[#segs + 1] = { "img", text or ("[image: " .. img.alt .. "]"), img = img }
             imgsig = imgsig .. img.s .. (img.st or "") .. ","
           end
+        elseif s[1] == "tl" and text and text ~= "" and isId(s.id) then
+          -- { "tl", "<label>", id="<tid>" } (rev 1.4): a link to another thread (a subagent, a t3-thread link).
+          segs[#segs + 1] = { "tl", str(text, 200), id = s.id }
+          total = total + #text
         elseif text and text ~= "" then
           local kind = (s[1] == "c") and "c" or "p"
           segs[#segs + 1] = { kind, text }
@@ -105,6 +112,12 @@ local function normMsg(m)
   }
 end
 
+local function count(v)
+  local n = int(v)
+  if n and n > 0 then return math.min(n, 9999) end
+  return nil
+end
+
 local function normThread(t)
   if type(t) ~= "table" or not isId(t.id) then return nil end
   return {
@@ -114,7 +127,17 @@ local function normThread(t)
     need = NEEDS[t.need] and t.need or nil,
     t0 = int(t.t0), t1 = int(t.t1),
     model = str(t.model, 64), proj = str(t.proj, 64),
+    -- rev 1.4: subagent threads name their parent; parents count their subagents.
+    parent = (isId(t.parent) and t.parent ~= t.id) and t.parent or nil,
+    kids = count(t.kids), kidsRunning = count(t.kidsRunning), kidsNeed = count(t.kidsNeed),
   }
+end
+State.NormThread = normThread
+
+--- { id=, title= } reference (focus.parent, focus.path entries).
+local function normRef(r)
+  if type(r) ~= "table" or not isId(r.id) then return nil end
+  return { id = r.id, title = str(r.title, 120) or r.id }
 end
 
 local function isOptId(v)
@@ -166,6 +189,31 @@ local function normFocus(f)
     out.notice = str(f.notice, 200)
     out.nid = int(f.nid) or 0
   end
+  -- Optional (rev 1.4): the focused thread's parent, subagents and breadcrumb (root -> focused).
+  out.parent = normRef(f.parent)
+  if out.parent and out.parent.id == out.id then out.parent = nil end
+  if type(f.kids) == "table" then
+    out.kids = {}
+    local seen = {}
+    for _, k in ipairs(f.kids) do
+      local nk = normThread(k)
+      if nk and not seen[nk.id] and nk.id ~= out.id and #out.kids < State.MAX_KIDS then
+        seen[nk.id] = true
+        nk.parent = out.id
+        out.kids[#out.kids + 1] = nk
+      end
+    end
+    out.nkids = math.max(#out.kids, int(f.nkids) or 0)
+    if #out.kids == 0 then out.kids, out.nkids = nil, nil end
+  end
+  if type(f.path) == "table" then
+    local path = {}
+    for _, r in ipairs(f.path) do
+      local nr = normRef(r)
+      if nr and #path < State.MAX_PATH then path[#path + 1] = nr end
+    end
+    if #path >= 2 and path[#path].id == out.id then out.path = path end
+  end
   if type(f.msgs) == "table" then
     local seen = {}
     for _, m in ipairs(f.msgs) do
@@ -194,15 +242,29 @@ function State.Validate(raw, rawEnd)
   if type(raw.err) == "table" and int(raw.err.seq) then
     snap.err = { seq = int(raw.err.seq), text = str(raw.err.text, 200) or "error" }
   end
+  -- threads: top-level rows. A thread with `parent` (rev 1.4: the focused subagent and its ancestors)
+  -- goes to subs with the subagent rows of `raw.subs`, so it never becomes a top-level tracker row.
+  snap.subs = {}
+  local seen = {}
+  local function addSub(nt)
+    if nt and nt.parent and not seen[nt.id] and #snap.subs < State.MAX_SUBS then
+      seen[nt.id] = true
+      snap.subs[#snap.subs + 1] = nt
+    end
+  end
   if type(raw.threads) == "table" then
-    local seen = {}
     for _, t in ipairs(raw.threads) do
       local nt = normThread(t)
-      if nt and not seen[nt.id] and #snap.threads < State.MAX_THREADS then
+      if nt and nt.parent then
+        addSub(nt)
+      elseif nt and not seen[nt.id] and #snap.threads < State.MAX_THREADS then
         seen[nt.id] = true
         snap.threads[#snap.threads + 1] = nt
       end
     end
+  end
+  if type(raw.subs) == "table" then
+    for _, t in ipairs(raw.subs) do addSub(normThread(t)) end
   end
   snap.focus = normFocus(raw.focus)
   -- Optional (rev 1.3, D16): image slots left/total and what frees them.
@@ -219,8 +281,34 @@ end
 ---------------------------------------------------------------------------------------------
 function State.New()
   return { lastSid = nil, lastSeq = 0, snap = nil, acceptedAt = nil, cache = { tid = nil, byI = {}, n = 0 },
+    known = {}, knownN = 0,
     stats = { accepted = 0, stale = 0, torn = 0, missing = 0, version = 0, reset = 0 } }
 end
+
+--- rev 1.4: titles and parent links seen in any snapshot of this UI session (kept across companion
+--- restarts), so Up and the breadcrumb still work for a subagent the current snapshot does not list.
+--- known[tid] = { title, parent = <tid> | false (top-level) }. In memory only; capped at 400 entries.
+local function remember(st, snap)
+  local k = st.known
+  if not k or (st.knownN or 0) > 400 then k = {}; st.known = k; st.knownN = 0 end
+  local function put(id, title, parent)
+    local e = k[id]
+    if not e then e = {}; k[id] = e; st.knownN = st.knownN + 1 end
+    if title then e.title = title end
+    if parent ~= nil then e.parent = parent end
+  end
+  for _, t in ipairs(snap.threads) do put(t.id, t.title, false) end
+  for _, t in ipairs(snap.subs or {}) do put(t.id, t.title, t.parent) end
+  local f = snap.focus
+  if f then
+    if f.parent then put(f.parent.id, f.parent.title, nil); put(f.id, nil, f.parent.id) end
+    for _, t in ipairs(f.kids or {}) do put(t.id, t.title, f.id) end
+    for i, r in ipairs(f.path or {}) do put(r.id, r.title, i > 1 and f.path[i - 1].id or nil) end
+  end
+end
+
+--- A thread seen in an earlier snapshot of this session (rev 1.4), or nil.
+function State.Known(st, tid) return st.known and tid and st.known[tid] or nil end
 
 local function mergeFocus(st, f)
   if not f then return end
@@ -264,6 +352,7 @@ function State.Accept(st, raw, rawEnd, now)
   st.snap = snap
   st.acceptedAt = now
   mergeFocus(st, snap.focus)
+  remember(st, snap)
   st.stats[result] = (st.stats[result] or 0) + 1
   return result
 end
@@ -278,10 +367,79 @@ function State.Age(st, now)
   return a < 0 and 0 or a
 end
 
+--- A listed thread: a top-level row, a subagent row (rev 1.4), or a subagent / ancestor named only by
+--- the focused thread's kids or breadcrumb (then only id, title and, for kids, the run state are known).
 function State.Thread(st, tid)
-  if not st.snap then return nil end
-  for _, t in ipairs(st.snap.threads) do if t.id == tid then return t end end
+  local snap = st.snap
+  if not snap or not tid then return nil end
+  for _, t in ipairs(snap.threads) do if t.id == tid then return t end end
+  for _, t in ipairs(snap.subs or {}) do if t.id == tid then return t end end
+  local f = snap.focus
+  if f then
+    for _, t in ipairs(f.kids or {}) do if t.id == tid then return t end end
+    if f.parent and f.parent.id == tid then return { id = tid, title = f.parent.title, st = "idle", ref = true } end
+    for k, r in ipairs(f.path or {}) do
+      if r.id == tid then return { id = tid, title = r.title, st = "idle", ref = true, parent = k > 1 and f.path[k - 1].id or nil } end
+    end
+  end
   return nil
+end
+
+--- Parent tid of a thread (rev 1.4), or nil for a top-level thread.
+function State.ParentOf(st, tid)
+  local f = st.snap and st.snap.focus
+  if f and f.id == tid and f.parent then return f.parent.id end
+  local t = State.Thread(st, tid)
+  if t then return t.parent end
+  local k = State.Known(st, tid)
+  return k and k.parent or nil
+end
+
+--- Subagents of a thread: focus.kids when it is the focused thread (complete, up to 20), else the
+--- subagent rows naming it as parent. Returns list, total (focus.nkids or the row's kids count).
+function State.Kids(st, tid)
+  local snap = st.snap
+  if not snap or not tid then return {}, 0 end
+  local f = snap.focus
+  if f and f.id == tid and f.kids then return f.kids, f.nkids or #f.kids end
+  local out = {}
+  for _, t in ipairs(snap.subs or {}) do if t.parent == tid then out[#out + 1] = t end end
+  local row = State.Thread(st, tid)
+  return out, math.max(#out, row and row.kids or 0)
+end
+
+--- Breadcrumb root -> tid: focus.path when tid is focused, else walked up through parent links.
+function State.Path(st, tid)
+  local f = st.snap and st.snap.focus
+  if f and f.id == tid and f.path then return f.path end
+  local path, seen, cur = {}, {}, tid
+  while cur and not seen[cur] and #path < 8 do
+    seen[cur] = true
+    local t = State.Thread(st, cur)
+    local k = (not t) and State.Known(st, cur) or nil
+    if not t and not (k and k.title) then break end
+    table.insert(path, 1, { id = cur, title = t and t.title or k.title })
+    cur = t and t.parent or (k and k.parent) or nil
+  end
+  while #path > State.MAX_PATH do table.remove(path, 2) end
+  return path
+end
+
+--- Counts for a subagent list: total, running, needs you.
+function State.KidCounts(list)
+  local n = { total = #list, running = 0, needs = 0 }
+  for _, t in ipairs(list) do
+    if t.need then n.needs = n.needs + 1 elseif t.st == "running" then n.running = n.running + 1 end
+  end
+  return n
+end
+
+--- "Subagents (3 · 1 running · 1 needs you)" for the chat strip and the tracker badge tooltip.
+function State.KidsLabel(total, running, needs)
+  local p = { tostring(total) }
+  if (running or 0) > 0 then p[#p + 1] = running .. " running" end
+  if (needs or 0) > 0 then p[#p + 1] = needs .. " needs you" end
+  return "Subagents (" .. table.concat(p, State.DOT) .. ")"
 end
 
 --- Focus detail, only when the companion's focus is `tid`.
@@ -389,6 +547,7 @@ end
 --- Attention signature: "" when nothing needs the user, else a short state key.
 function State.AttentionSig(t)
   if t.need then return t.need end
+  if (t.kidsNeed or 0) > 0 then return "kids:need" end -- rev 1.4: a subagent needs you
   if t.st == "failed" then return "failed:" .. tostring(t.t1 or 0) end
   return ""
 end
@@ -502,13 +661,16 @@ end
 
 function State.AnyNeedsYou(st)
   if not st.snap then return false end
-  for _, t in ipairs(st.snap.threads) do if t.need then return true end end
+  for _, t in ipairs(st.snap.threads) do if t.need or (t.kidsNeed or 0) > 0 then return true end end
   return false
 end
 
 function State.AnyActive(st)
   if not st.snap then return false end
-  for _, t in ipairs(st.snap.threads) do if t.need or t.st == "running" then return true end end
+  for _, t in ipairs(st.snap.threads) do
+    if t.need or t.st == "running" or (t.kidsRunning or 0) > 0 or (t.kidsNeed or 0) > 0 then return true end
+  end
+  for _, t in ipairs(st.snap.subs or {}) do if t.need or t.st == "running" then return true end end
   return false
 end
 
@@ -526,6 +688,29 @@ function State.ThreadGroups(st)
   if #g.needs > 0 then out[#out + 1] = { title = "Needs you", items = g.needs } end
   if #g.running > 0 then out[#out + 1] = { title = "Running", items = g.running } end
   if #g.recent > 0 then out[#out + 1] = { title = "Other open threads", items = g.recent } end
+  return out
+end
+
+--- Thread menu (rev 1.4): ThreadGroups with each thread's subagents listed under it.
+--- Returns groups { title, items = { { t = thread, depth = 0|1|2 }, ... } }. Subagents come from the
+--- subagent rows (and the focused thread's kids); depth is capped at 2, each list at maxKids per parent.
+function State.ThreadMenu(st, maxKids)
+  maxKids = maxKids or 8
+  local groups = State.ThreadGroups(st)
+  local out = {}
+  for _, g in ipairs(groups) do
+    local items, seen = {}, {}
+    local function add(t, depth)
+      if seen[t.id] then return end
+      seen[t.id] = true
+      items[#items + 1] = { t = t, depth = depth }
+      if depth >= 2 then return end
+      local kids = State.Kids(st, t.id)
+      for k = 1, math.min(#kids, maxKids) do add(kids[k], depth + 1) end
+    end
+    for _, t in ipairs(g.items) do add(t, 0) end
+    out[#out + 1] = { title = g.title, items = items }
+  end
   return out
 end
 

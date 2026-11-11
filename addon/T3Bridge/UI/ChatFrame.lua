@@ -1,5 +1,6 @@
 -- T3Bridge ChatFrame: the in-game chat window (thread, model and effort pickers, history, prompt, input,
--- image attachments: Attach button + menu, Ctrl+V, staged chips; PROTOCOL rev 1.3).
+-- image attachments: Attach button + menu, Ctrl+V, staged chips; PROTOCOL rev 1.3; subagents: Up button,
+-- breadcrumb and the Subagents strip; rev 1.4).
 local _, ns = ...
 local Compat, State, Codec = ns.Compat, ns.State, ns.Codec
 
@@ -12,6 +13,10 @@ local ICON = "Interface\\AddOns\\T3Bridge\\Media\\icon"
 local MIN_W, MIN_H = 420, 360
 local INPUT_H, STATUS_H = 60, 18
 local CHIPS_H, CHIP = 40, 36          -- staged-attachment row above the input (rev 1.3)
+local UP_W = 26                       -- Up button left of the thread dropdown (rev 1.4)
+local CRUMB_H = 16                    -- breadcrumb line under the top bar (rev 1.4)
+local KIDS_HEAD_H, KID_H = 18, 16     -- Subagents strip header and rows (rev 1.4)
+local CRUMB_SEP = " \194\187 "         -- " >> " as U+00BB (Latin-1; in the WoW fonts)
 local PASTE_DEBOUNCE = 1.0            -- s between two Ctrl+V-triggered "clip" commands
 
 local f                    -- the window
@@ -27,13 +32,18 @@ end
 ---------------------------------------------------------------------------------------------
 -- Dropdowns: WowStyle1DropdownTemplate (menu API), fallback UIDropDownMenuTemplate
 ---------------------------------------------------------------------------------------------
-local function threadLabel(t)
+local function threadLabel(t, depth)
   local info = State.STATUS[State.StatusKey(t)]
   local c = info.color
   local title = t.title
-  if #title > 48 then title = Codec.Utf8Truncate(title, 46) .. "..." end
-  return string.format("|cff%02x%02x%02x%s|r", c[1] * 255, c[2] * 255, c[3] * 255, Compat.Escape(title))
+  depth = depth or 0
+  local max = 48 - depth * 4
+  if #title > max then title = Codec.Utf8Truncate(title, max - 2) .. "..." end
+  -- Subagents are indented under their parent with spaces and an ASCII "-" (every WoW font has it).
+  local indent = depth > 0 and ("|cff808080" .. string.rep("   ", depth - 1) .. " - |r") or ""
+  return indent .. string.format("|cff%02x%02x%02x%s|r", c[1] * 255, c[2] * 255, c[3] * 255, Compat.Escape(title))
 end
+Chat.ThreadLabel = threadLabel
 
 local function createDropdown(parent, width, buildModern, buildLegacy, defaultText)
   local d = { width = width }
@@ -70,26 +80,28 @@ local function legacyAdd(text, opts, level)
 end
 
 local function buildThreadMenuModern(root)
-  local groups = State.ThreadGroups(ns.state)
+  local groups = State.ThreadMenu(ns.state)
   if #groups == 0 then root:CreateTitle("No threads yet") return end
-  -- Up to 30 threads (PROTOCOL D15): scroll instead of running off the screen, where supported.
+  -- Up to 30 threads (PROTOCOL D15) plus subagents: scroll instead of running off the screen, where supported.
   if root.SetScrollMode then pcall(root.SetScrollMode, root, 440) end
   for _, g in ipairs(groups) do
     root:CreateTitle(g.title)
-    for _, t in ipairs(g.items) do
-      root:CreateRadio(threadLabel(t), function() return ns.selected == t.id end,
+    for _, it in ipairs(g.items) do
+      local t = it.t
+      root:CreateRadio(threadLabel(t, it.depth), function() return ns.selected == t.id end,
         function() ns.SelectThread(t.id) end, t.id)
     end
   end
 end
 
 local function buildThreadMenuLegacy(level)
-  local groups = State.ThreadGroups(ns.state)
+  local groups = State.ThreadMenu(ns.state)
   if #groups == 0 then legacyAdd("No threads yet", { isTitle = true, notCheckable = true }, level) return end
   for _, g in ipairs(groups) do
     legacyAdd(g.title, { isTitle = true, notCheckable = true }, level)
-    for _, t in ipairs(g.items) do
-      legacyAdd(threadLabel(t), { checked = (ns.selected == t.id), func = function()
+    for _, it in ipairs(g.items) do
+      local t = it.t
+      legacyAdd(threadLabel(t, it.depth), { checked = (ns.selected == t.id), func = function()
         ns.SelectThread(t.id)
         CloseDropDownMenus()
       end }, level)
@@ -470,6 +482,311 @@ function Chat.UpdateChips(staged)
 end
 
 ---------------------------------------------------------------------------------------------
+-- Subagents (rev 1.4): Up button, breadcrumb, Subagents strip
+---------------------------------------------------------------------------------------------
+--- Go up one level: open the parent of the thread shown (a subagent). Returns the parent tid or nil.
+function Chat.Up()
+  local tid = ns.selected
+  local parent = tid and State.ParentOf(ns.state, tid)
+  if not parent then return nil end
+  ns.SelectThread(parent)
+  return parent
+end
+
+--- Breadcrumb widths (pure, for tests): naturals = natural widths root .. current, sepW = separator
+--- width, avail = room. The current thread keeps up to 45 % (at least 80 px); ancestors share the rest
+--- (the widest shrink first), none below minW. Returns widths.
+function Chat.FitCrumbs(naturals, sepW, avail, minW)
+  minW = minW or 30
+  local n = #naturals
+  local w = {}
+  for k = 1, n do w[k] = naturals[k] end
+  if n == 0 then return w end
+  local total = (n - 1) * sepW
+  for k = 1, n do total = total + w[k] end
+  if total <= avail then return w end
+  local room = avail - (n - 1) * sepW
+  local last = math.min(naturals[n], math.max(80, math.floor(room * 0.45)))
+  local anc = n - 1
+  local budget = room - last
+  if budget < anc * minW then
+    for k = 1, anc do w[k] = math.min(naturals[k], minW) end
+    local used = 0
+    for k = 1, anc do used = used + w[k] end
+    w[n] = math.max(minW, room - used)
+    return w
+  end
+  -- water-fill the ancestors: find a cap c with sum(min(natural, c)) <= budget
+  local lo, hi = minW, 0
+  for k = 1, anc do hi = math.max(hi, naturals[k]) end
+  for _ = 1, 30 do
+    local mid = (lo + hi) / 2
+    local sum = 0
+    for k = 1, anc do sum = sum + math.min(naturals[k], mid) end
+    if sum > budget then hi = mid else lo = mid end
+  end
+  local used = 0
+  for k = 1, anc do w[k] = math.floor(math.min(naturals[k], lo)); used = used + w[k] end
+  w[n] = math.min(naturals[n], math.max(last, room - used))
+  return w
+end
+
+local function crumbOnEnter(self)
+  self.text:SetTextColor(UI.Messages.LINK_HOVER[1], UI.Messages.LINK_HOVER[2], UI.Messages.LINK_HOVER[3])
+  GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
+  GameTooltip:SetText(Compat.Escape(self.title or ""), 1, 1, 1, true)
+  GameTooltip:AddLine("Click: open this thread", 0.5, 0.8, 1)
+  GameTooltip:Show()
+end
+
+local function crumbOnLeave(self)
+  local c = UI.Messages.LINK_COLOR
+  self.text:SetTextColor(c[1], c[2], c[3])
+  GameTooltip:Hide()
+end
+
+local function crumbButton(i)
+  local b = L.crumbBtns[i]
+  if b then return b end
+  b = CreateFrame("Button", nil, L.crumb)
+  b:SetHeight(CRUMB_H)
+  b.text = b:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+  b.text:SetPoint("LEFT", 0, 0)
+  b.text:SetJustifyH("LEFT")
+  b.text:SetWordWrap(false)
+  b:SetScript("OnEnter", crumbOnEnter)
+  b:SetScript("OnLeave", crumbOnLeave)
+  b:SetScript("OnClick", function(self) if self.tid and self.tid ~= ns.selected then ns.SelectThread(self.tid) end end)
+  L.crumbBtns[i] = b
+  return b
+end
+
+local function crumbSep(i)
+  local s = L.crumbSeps[i]
+  if s then return s end
+  s = L.crumb:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+  s:SetText(CRUMB_SEP)
+  L.crumbSeps[i] = s
+  return s
+end
+
+--- Show the breadcrumb (root .. shown thread) when the shown thread is a subagent. Returns its height.
+function Chat.UpdateCrumbs(tid)
+  local path = tid and State.Path(ns.state, tid) or {}
+  local child = tid and State.ParentOf(ns.state, tid) ~= nil
+  if not child or #path < 2 then
+    L.crumb:Hide()
+    L.crumbPath = nil
+    return 0
+  end
+  L.crumb:Show()
+  L.crumbPath = path
+  local avail = math.max(60, (f:GetWidth() or 520) - (L.left or 12) - 16)
+  local naturals, sepW = {}, 0
+  for k, r in ipairs(path) do
+    local b = crumbButton(k)
+    b.text:SetWidth(0)
+    b.text:SetText(Compat.Escape(r.title))
+    naturals[k] = math.ceil(b.text:GetStringWidth() or (#r.title * 6)) + 2
+  end
+  local s1 = crumbSep(1)
+  sepW = math.ceil(s1:GetStringWidth() or 10)
+  local widths = Chat.FitCrumbs(naturals, sepW, avail, 30)
+  local x = 0
+  for k, r in ipairs(path) do
+    local b = crumbButton(k)
+    local last = (k == #path)
+    b.tid, b.title = r.id, r.title
+    b:ClearAllPoints()
+    b:SetPoint("LEFT", L.crumb, "LEFT", x, 0)
+    b:SetWidth(widths[k])
+    b.text:SetWidth(widths[k])
+    if last then
+      b.text:SetTextColor(1, 1, 1)
+      b:EnableMouse(false)
+    else
+      local c = UI.Messages.LINK_COLOR
+      b.text:SetTextColor(c[1], c[2], c[3])
+      b:EnableMouse(true)
+    end
+    b:Show()
+    x = x + widths[k]
+    if not last then
+      local sp = crumbSep(k)
+      sp:ClearAllPoints()
+      sp:SetPoint("LEFT", L.crumb, "LEFT", x, 0)
+      sp:Show()
+      x = x + sepW
+    end
+  end
+  for k = #path + 1, #L.crumbBtns do L.crumbBtns[k]:Hide(); L.crumbBtns[k].tid = nil end
+  for k = #path, #L.crumbSeps do L.crumbSeps[k]:Hide() end
+  L.crumbWidths = widths
+  return CRUMB_H
+end
+
+local function kidRowOnEnter(self)
+  local t = self.thread
+  if not t then return end
+  GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+  GameTooltip:AddLine(Compat.Escape(t.title), 1, 1, 1, true)
+  local info = State.STATUS[State.StatusKey(t)]
+  GameTooltip:AddDoubleLine("Status", info.label, 0.7, 0.7, 0.7, info.color[1], info.color[2], info.color[3])
+  local e = State.Elapsed(t, ns.Now())
+  if e then GameTooltip:AddDoubleLine(t.t1 and "Took" or "Elapsed", State.FormatElapsed(e), 0.7, 0.7, 0.7, 1, 0.82, 0) end
+  if (t.kids or 0) > 0 then GameTooltip:AddDoubleLine("Subagents", tostring(t.kids), 0.7, 0.7, 0.7, 1, 1, 1) end
+  GameTooltip:AddLine("Click: open this subagent", 0.5, 0.8, 1)
+  GameTooltip:Show()
+end
+
+local function kidRow(i)
+  local b = L.kidRows[i]
+  if b then return b end
+  b = CreateFrame("Button", nil, L.kids)
+  b:SetHeight(KID_H)
+  b.icon = b:CreateTexture(nil, "ARTWORK")
+  b.icon:SetSize(12, 12)
+  b.icon:SetPoint("LEFT", 16, 0)
+  b.timer = b:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+  b.timer:SetPoint("RIGHT", -6, 0)
+  b.timer:SetJustifyH("RIGHT")
+  b.badge = b:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+  b.badge:SetPoint("RIGHT", b.timer, "LEFT", -6, 0)
+  b.title = b:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+  b.title:SetPoint("LEFT", b.icon, "RIGHT", 4, 0)
+  b.title:SetPoint("RIGHT", b.badge, "LEFT", -6, 0)
+  b.title:SetJustifyH("LEFT")
+  b.title:SetWordWrap(false)
+  local hl = b:CreateTexture(nil, "HIGHLIGHT")
+  hl:SetTexture("Interface\\QuestFrame\\UI-QuestTitleHighlight")
+  hl:SetBlendMode("ADD")
+  hl:SetAllPoints(b)
+  hl:SetAlpha(0.5)
+  local ag = b:CreateAnimationGroup()
+  local a = ag:CreateAnimation("Alpha")
+  a:SetFromAlpha(1)
+  a:SetToAlpha(0.35)
+  a:SetDuration(0.7)
+  a:SetSmoothing("IN_OUT")
+  ag:SetLooping("BOUNCE")
+  b.pulse = ag
+  b:SetScript("OnEnter", kidRowOnEnter)
+  b:SetScript("OnLeave", function() GameTooltip:Hide() end)
+  b:SetScript("OnClick", function(self)
+    if self.more then Chat.OpenThreadMenu() elseif self.thread then ns.SelectThread(self.thread.id) end
+  end)
+  L.kidRows[i] = b
+  return b
+end
+
+--- Is the Subagents strip expanded? Saved per character-independent setting; a subagent that needs
+--- you expands it by itself.
+function Chat.KidsOpen(counts)
+  if counts and counts.needs > 0 then return true end
+  return ns.db and ns.db.chat and ns.db.chat.kidsOpen == true or false
+end
+
+function Chat.ToggleKids()
+  if not ns.db then return end
+  ns.db.chat.kidsOpen = not (ns.db.chat.kidsOpen == true)
+  Chat.Refresh()
+end
+
+--- Rows the strip may use at the current window height (the 420x360 minimum keeps the history usable).
+function Chat.KidRowsFit(frameH, crumbH)
+  return math.max(1, math.min(8, math.floor(((frameH or 560) - 290 - (crumbH or 0)) / KID_H)))
+end
+
+--- Show the Subagents strip for thread tid. Returns its height (0 = hidden).
+function Chat.UpdateKids(tid, crumbH)
+  local list, total = {}, 0
+  if tid then list, total = State.Kids(ns.state, tid) end
+  if total == 0 then
+    L.kids:Hide()
+    for _, b in ipairs(L.kidRows) do b:Hide(); b.thread = nil; if b.pulse:IsPlaying() then b.pulse:Stop() end end
+    L.kidsShown = 0
+    return 0
+  end
+  local counts = State.KidCounts(list)
+  local open = Chat.KidsOpen(counts)
+  L.kids:Show()
+  L.kidsHead.text:SetText(State.KidsLabel(total, counts.running, counts.needs))
+  L.kidsHead.arrow:SetTexture(open and "Interface\\Buttons\\UI-MinusButton-Up" or "Interface\\Buttons\\UI-PlusButton-Up")
+  L.kidsHead.open = open
+  local shown = 0
+  local h = KIDS_HEAD_H
+  if open then
+    local fit = Chat.KidRowsFit(f:GetHeight(), crumbH)
+    local more = total - #list
+    local n = #list
+    if n > fit or more > 0 then n = math.min(n, math.max(0, fit - 1)) end
+    local offline = State.IsOffline(ns.state, ns.Now()) and not ns.demo
+    for k = 1, n do
+      local t = list[k]
+      local b = kidRow(k)
+      local key = State.StatusKey(t)
+      local info = State.STATUS[key]
+      b.thread, b.more = t, nil
+      b:ClearAllPoints()
+      b:SetPoint("TOPLEFT", L.kids, "TOPLEFT", 0, -(KIDS_HEAD_H + (k - 1) * KID_H))
+      b:SetPoint("TOPRIGHT", L.kids, "TOPRIGHT", 0, -(KIDS_HEAD_H + (k - 1) * KID_H))
+      b.icon:SetTexture(info.icon)
+      b.icon:Show()
+      b.title:SetText(Compat.Escape(t.title))
+      b.title:SetTextColor(info.color[1], info.color[2], info.color[3])
+      b.badge:SetText((t.kids or 0) > 0 and ("+" .. t.kids) or "")
+      local e = State.Elapsed(t, ns.Now())
+      b.timer:SetText(e and State.FormatElapsed(e) or "")
+      b.timer:SetTextColor(info.timer[1], info.timer[2], info.timer[3])
+      b:SetAlpha(offline and 0.55 or 1)
+      if info.pulse and not offline then
+        if not b.pulse:IsPlaying() then b.pulse:Play() end
+      elseif b.pulse:IsPlaying() then b.pulse:Stop() end
+      b:Show()
+    end
+    shown = n
+    local rest = total - n
+    if rest > 0 then
+      local b = kidRow(n + 1)
+      b.thread, b.more = nil, true
+      b:ClearAllPoints()
+      b:SetPoint("TOPLEFT", L.kids, "TOPLEFT", 0, -(KIDS_HEAD_H + n * KID_H))
+      b:SetPoint("TOPRIGHT", L.kids, "TOPRIGHT", 0, -(KIDS_HEAD_H + n * KID_H))
+      b.icon:Hide()
+      b.title:SetText(rest .. " more...")
+      b.title:SetTextColor(0.6, 0.6, 0.6)
+      b.badge:SetText("")
+      b.timer:SetText("")
+      if b.pulse:IsPlaying() then b.pulse:Stop() end
+      b:SetAlpha(1)
+      b:Show()
+      shown = n + 1
+    end
+    h = KIDS_HEAD_H + shown * KID_H + 2
+  end
+  for k = shown + 1, #L.kidRows do
+    local b = L.kidRows[k]
+    b:Hide(); b.thread, b.more = nil, nil
+    if b.pulse:IsPlaying() then b.pulse:Stop() end
+  end
+  L.kidsShown = shown
+  L.kids:SetHeight(h)
+  return h
+end
+
+--- Per-second timers of the strip rows.
+function Chat.TickKids()
+  if not L.kidRows then return end
+  local now = ns.Now()
+  for _, b in ipairs(L.kidRows) do
+    if b:IsShown() and b.thread then
+      local e = State.Elapsed(b.thread, now)
+      b.timer:SetText(e and State.FormatElapsed(e) or "")
+    end
+  end
+end
+
+---------------------------------------------------------------------------------------------
 -- Window
 ---------------------------------------------------------------------------------------------
 local function savePosition()
@@ -555,6 +872,73 @@ local function create()
   L.status:SetPoint("TOPRIGHT", f, "TOPRIGHT", -14, top - 8)
   L.status:SetJustifyH("RIGHT")
   L.status:SetWordWrap(false)
+
+  -- rev 1.4: Up button (shown for a subagent) left of the thread dropdown, which then moves right.
+  L.top = top
+  L.up = CreateFrame("Button", nil, f)
+  L.up:SetSize(UP_W, UP_W)
+  L.up:SetPoint("TOPLEFT", f, "TOPLEFT", left - 4, top)
+  L.up:SetNormalTexture("Interface\\Buttons\\UI-SpellbookIcon-PrevPage-Up")
+  L.up:SetPushedTexture("Interface\\Buttons\\UI-SpellbookIcon-PrevPage-Down")
+  L.up:SetDisabledTexture("Interface\\Buttons\\UI-SpellbookIcon-PrevPage-Disabled")
+  L.up:SetHighlightTexture("Interface\\Buttons\\UI-Common-MouseHilight", "ADD")
+  L.up:SetScript("OnClick", function() Chat.Up() end)
+  L.up:SetScript("OnEnter", function(self)
+    local parent = ns.selected and State.ParentOf(ns.state, ns.selected)
+    local pt = parent and State.Thread(ns.state, parent)
+    GameTooltip:SetOwner(self, "ANCHOR_BOTTOMRIGHT")
+    GameTooltip:SetText("Up to the parent thread")
+    if pt then GameTooltip:AddLine(Compat.Escape(pt.title), 1, 1, 1, true) end
+    GameTooltip:AddLine("/t3 up does the same", 0.6, 0.6, 0.6)
+    GameTooltip:Show()
+  end)
+  L.up:SetScript("OnLeave", function() GameTooltip:Hide() end)
+  L.up:Hide()
+
+  -- rev 1.4: breadcrumb (root >> ... >> this subagent) under the top bar; ancestors are clickable.
+  L.crumb = CreateFrame("Frame", nil, f)
+  L.crumb:SetHeight(CRUMB_H)
+  L.crumb:SetPoint("TOPLEFT", f, "TOPLEFT", left + 2, top - 30)
+  L.crumb:SetPoint("TOPRIGHT", f, "TOPRIGHT", -14, top - 30)
+  L.crumb:Hide()
+  L.crumbBtns, L.crumbSeps = {}, {}
+
+  -- rev 1.4: Subagents strip above the history: header "Subagents (3 . 1 running)" + rows.
+  L.kids = CreateFrame("Frame", nil, f)
+  L.kids:SetHeight(KIDS_HEAD_H)
+  L.kids:Hide()
+  L.kids.bg = L.kids:CreateTexture(nil, "BACKGROUND")
+  L.kids.bg:SetColorTexture(0, 0, 0, 0.25)
+  L.kids.bg:SetAllPoints(L.kids)
+  L.kidsHead = CreateFrame("Button", nil, L.kids)
+  L.kidsHead:SetHeight(KIDS_HEAD_H)
+  L.kidsHead:SetPoint("TOPLEFT")
+  L.kidsHead:SetPoint("TOPRIGHT")
+  L.kidsHead.arrow = L.kidsHead:CreateTexture(nil, "ARTWORK")
+  L.kidsHead.arrow:SetSize(12, 12)
+  L.kidsHead.arrow:SetPoint("LEFT", 2, 0)
+  L.kidsHead.text = L.kidsHead:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+  L.kidsHead.text:SetPoint("LEFT", L.kidsHead.arrow, "RIGHT", 4, 0)
+  L.kidsHead.text:SetJustifyH("LEFT")
+  L.kidsHead.line = L.kidsHead:CreateTexture(nil, "BORDER")
+  L.kidsHead.line:SetColorTexture(1, 0.82, 0, 0.25)
+  L.kidsHead.line:SetHeight(1)
+  L.kidsHead.line:SetPoint("BOTTOMLEFT")
+  L.kidsHead.line:SetPoint("BOTTOMRIGHT")
+  local khl = L.kidsHead:CreateTexture(nil, "HIGHLIGHT")
+  khl:SetTexture("Interface\\QuestFrame\\UI-QuestTitleHighlight")
+  khl:SetBlendMode("ADD")
+  khl:SetAllPoints(L.kidsHead)
+  khl:SetAlpha(0.35)
+  L.kidsHead:SetScript("OnClick", function() Chat.ToggleKids() end)
+  L.kidsHead:SetScript("OnEnter", function(self)
+    GameTooltip:SetOwner(self, "ANCHOR_TOP")
+    GameTooltip:SetText("Subagent threads of this thread")
+    GameTooltip:AddLine(self.open and "Click: hide the list" or "Click: show the list", 0.7, 0.7, 0.7)
+    GameTooltip:Show()
+  end)
+  L.kidsHead:SetScript("OnLeave", function() GameTooltip:Hide() end)
+  L.kidRows = {}
 
   -- bottom: status bar
   L.statusBar = CreateFrame("Button", nil, f)
@@ -663,11 +1047,33 @@ local function create()
   return f
 end
 
---- Place the history above the prompt (if shown), the staged chips (if any) or the input.
-function Chat.Layout(promptH, chipsShown)
+--- Up button: shown for a subagent; the thread dropdown moves right to make room. Returns true if shown.
+function Chat.UpdateUp(tid)
+  local child = tid and State.ParentOf(ns.state, tid) ~= nil
+  local shift = child and UP_W or 0
+  if L.upShift ~= shift then
+    L.upShift = shift
+    L.threadDD.frame:ClearAllPoints()
+    L.threadDD.frame:SetPoint("TOPLEFT", f, "TOPLEFT", (L.left or 12) + shift - (L.threadDD.modern and 0 or 16), (L.top or -30) - 2)
+  end
+  L.up:SetShown(child and true or false)
+  return child and true or false
+end
+
+--- Place the history above the prompt (if shown), the staged chips (if any) or the input, and below
+--- the breadcrumb and the Subagents strip (rev 1.4) when they are shown.
+function Chat.Layout(promptH, chipsShown, crumbH, kidsH)
   L.inset:ClearAllPoints()
   local top = (L.template == "PortraitFrameTemplate") and -30 or (L.template == "BasicFrameTemplateWithInset" and -28 or -36)
-  L.inset:SetPoint("TOPLEFT", f, "TOPLEFT", 10, top - 34)
+  local y = top - 34 - (crumbH or 0)
+  if (kidsH or 0) > 0 then
+    L.kids:ClearAllPoints()
+    L.kids:SetPoint("TOPLEFT", f, "TOPLEFT", 12, y + 2)
+    L.kids:SetPoint("TOPRIGHT", f, "TOPRIGHT", -12, y + 2)
+    y = y - kidsH - 2
+  end
+  L.inset:SetPoint("TOPLEFT", f, "TOPLEFT", 10, y)
+  L.insetTop = y
   local below = chipsShown and L.chips or L.inputHolder
   local extra = chipsShown and (CHIPS_H + 4) or 0
   if promptH > 0 then
@@ -749,7 +1155,7 @@ function Chat.LayoutTop()
   if L.effortDD.frame:IsShown() then keys[#keys + 1] = "effort" end
   L.status:SetWidth(0) -- natural width for measuring
   local statusW = (L.status:GetText() or "") ~= "" and (L.status:GetStringWidth() or 0) or 0
-  local w, statusLimit = Chat.FitTop(f:GetWidth() or 520, L.left or 12, statusW, keys, L.threadDD.modern and 6 or 4)
+  local w, statusLimit = Chat.FitTop(f:GetWidth() or 520, (L.left or 12) + (L.upShift or 0), statusW, keys, L.threadDD.modern and 6 or 4)
   local dds = { thread = L.threadDD, model = L.modelDD, effort = L.effortDD }
   for _, k in ipairs(keys) do
     local d = dds[k]
@@ -775,6 +1181,11 @@ function Chat.Refresh()
   local st, tid = ns.state, ns.selected
   local t = tid and State.Thread(st, tid)
   local fo = tid and State.Focus(st, tid)
+
+  -- Up button, breadcrumb and Subagents strip (rev 1.4)
+  Chat.UpdateUp(tid)
+  local crumbH = Chat.UpdateCrumbs(tid)
+  local kidsH = Chat.UpdateKids(tid, crumbH)
 
   -- dropdowns
   L.threadDD.Refresh(t and threadLabel(t) or nil)
@@ -803,7 +1214,7 @@ function Chat.Refresh()
   if width < 100 then width = 400 end
   local promptH = L.prompt:Update(fo and fo.pending or nil, tid, f:GetWidth() - 22)
   local chipsShown = Chat.UpdateChips(fo and not fo.pending and fo.staged or nil)
-  Chat.Layout(promptH, chipsShown)
+  Chat.Layout(promptH, chipsShown, crumbH, kidsH)
 
   -- history
   local list = tid and State.Messages(st, tid) or {}
@@ -880,6 +1291,8 @@ end
 function UI.ChatTopBar() return L.threadDD, L.modelDD, L.effortDD, L.status, L.topWidths, L.statusLimit end
 function UI.ChatInputBar() return L.eb, L.attach, L.send, L.chips, L.chipList, L.inputHolder, L.chipsShown end
 function UI.ChatView() return L.view end
+--- Test/diagnostic access to the subagent pieces (rev 1.4).
+function UI.ChatSubagents() return L.up, L.crumb, L.crumbBtns, L.kids, L.kidRows, L.kidsHead, L.crumbWidths, L.kidsShown end
 Chat.ChooseModel = function(id) chooseModel(id) end
 Chat.ChooseEffort = function(v) chooseEffort(v) end
 
@@ -897,7 +1310,7 @@ ns.On("notice", function()
   Chat.RefreshStatus()
   Compat.After(ns.NOTICE_S + 0.1, function() Chat.RefreshStatus() end)
 end)
-ns.On("tick", function() if f and f:IsShown() then Chat.RefreshStatus() end end)
+ns.On("tick", function() if f and f:IsShown() then Chat.RefreshStatus(); Chat.TickKids() end end)
 ns.On("sendFailed", function(item)
   if item.kind == "send" then
     echo = nil

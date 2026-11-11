@@ -169,7 +169,8 @@ function ns.EnsureFocus()
   local snap = ns.state.snap
   if not snap or State.IsOffline(ns.state, ns.Now()) then return end
   if snap.focus and snap.focus.id == tid then return end
-  if not State.Thread(ns.state, tid) then return end
+  -- rev 1.4: a subagent seen earlier counts too (a restarted companion may not list it yet).
+  if not State.Thread(ns.state, tid) and not State.Known(ns.state, tid) then return end
   local now = GetTime()
   if ns.lastFocusSendAt and now - ns.lastFocusSendAt < FOCUS_RETRY_S then return end
   ns.lastFocusSendAt = now

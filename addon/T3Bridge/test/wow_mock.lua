@@ -83,6 +83,7 @@ function Obj:SetScript(n, fn) self._scripts[n] = fn end
 function Obj:GetScript(n) return self._scripts[n] end
 function Obj:HookScript(n, fn) self._hooks[n] = self._hooks[n] or {}; table.insert(self._hooks[n], fn) end
 function Obj:HasScript() return true end
+function Obj:SetTextColor(r, g, b, a) self._textColor = { r, g, b, a } end
 for _, n in ipairs({ "SetFrameStrata", "SetFrameLevel", "SetToplevel", "SetClampedToScreen", "SetMovable",
   "SetResizable", "EnableMouse", "EnableMouseWheel", "RegisterForDrag", "RegisterForClicks", "StartMoving",
   "StopMovingOrSizing", "StartSizing", "SetResizeBounds", "SetMinResize", "SetMaxResize", "Raise", "LockHighlight",

@@ -30,6 +30,7 @@ function luaVal(v, ind) {
   if (typeof v === "boolean") return v ? "true" : "false";
   if (typeof v === "number") { if (!Number.isInteger(v)) throw new Error("ints only"); return String(v); }
   if (typeof v === "string") return luaStr(v);
+  if (v && typeof v.__lua === "string") return v.__lua; // pre-rendered (mixed array + key tables)
   if (Array.isArray(v)) {
     const nl = v.length && typeof v[0] === "object" && !Array.isArray(v[0]) ? "\n" + ind + " " : "";
     return "{" + nl + v.map((x) => luaVal(x, ind + " ")).join("," + nl) + "}";
@@ -42,8 +43,8 @@ function writeLuaFile(file, text) { fs.writeFileSync(file, Buffer.from(text, "la
 
 // ---- content ---------------------------------------------------------------------------
 const threads = [
-  { id: "a1b2c3d4", title: "Fix flaky login test in auth.spec.ts", st: "running", need: "approval", t0: TS - 754, t1: null, model: "Opus 5.5", proj: "t3code-web" },
-  { id: "b2c3d4e5", title: "Add dark mode toggle to the settings page", st: "running", need: null, t0: TS - 192, t1: null, model: "Sonnet 5.5", proj: "t3code-web" },
+  { id: "a1b2c3d4", title: "Fix flaky login test in auth.spec.ts", st: "running", need: "approval", t0: TS - 754, t1: null, model: "Opus 5.5", proj: "t3code-web", kids: 2 },
+  { id: "b2c3d4e5", title: "Add dark mode toggle to the settings page", st: "running", need: null, t0: TS - 192, t1: null, model: "Sonnet 5.5", proj: "t3code-web", kids: 3, kidsRunning: 1 },
   { id: "c3d4e5f6", title: "Migrate CI from Travis to GitHub Actions", st: "running", need: "input", t0: TS - 3725, t1: null, model: "Opus 5.5", proj: "infra" },
   { id: "d4e5f6a7", title: "Write release notes for v2.3 — “Aurora”", st: "completed", need: null, t0: TS - 1500, t1: TS - 420, model: "Haiku 5.5", proj: "docs" },
   { id: "e5f6a7b8", title: "Upgrade to React 19 and fix type errors | strict mode", st: "failed", need: null, t0: TS - 2400, t1: TS - 900, model: "Sonnet 5.5", proj: "t3code-web" },
@@ -51,7 +52,20 @@ const threads = [
   { id: "a7b8c9d0", title: "Refactor auth middleware into its own package", st: "idle", need: null, t0: TS - 86400, t1: TS - 80000, model: "Opus 5.5", proj: "api" },
 ];
 
+// Subagent threads (rev 1.4): children of a1b2c3d4 (the focused thread) and of b2c3d4e5.
+const kidsA = [
+  { id: "c1d2e3f4", title: "Check the other login() callers", st: "completed", need: null, t0: TS - 600, t1: TS - 540, model: "Haiku 5.5", proj: "t3code-web", parent: "a1b2c3d4" },
+  { id: "c2d3e4f5", title: "Write the regression test", st: "completed", need: null, t0: TS - 500, t1: TS - 380, model: "Opus 5.5", proj: "t3code-web", parent: "a1b2c3d4" },
+];
+const kidsB = [
+  { id: "d1e2f3a4", title: "Write the dark mode stylesheet", st: "running", need: null, t0: TS - 150, t1: null, model: "Sonnet 5.5", proj: "t3code-web", parent: "b2c3d4e5" },
+  { id: "d2e3f4a5", title: "Map the colour tokens", st: "completed", need: null, t0: TS - 180, t1: TS - 120, model: "Haiku 5.5", proj: "t3code-web", parent: "b2c3d4e5" },
+  { id: "d3e4f5a6", title: "Screenshot test for dark mode", st: "failed", need: null, t0: TS - 170, t1: TS - 60, model: "Sonnet 5.5", proj: "t3code-web", parent: "b2c3d4e5" },
+];
+const subs = [...kidsB, ...kidsA];
+
 const P = (t) => ["p", t];
+const TL = (label, id) => ({ __lua: `{"tl",${luaStr(label)},id=${luaStr(id)}}` });
 const C = (t) => ["c", t];
 const convo = [
   ["u", [P("The login test in auth.spec.ts fails about 1 in 5 runs on CI. Can you find out why and fix it?")]],
@@ -81,12 +95,12 @@ const convo = [
   ["a", [P("# Call sites of login()\nAll six call sites either `await` the result or ignore it, so making it wait slightly longer is **safe**. Summary:\n- `src/pages/Login.tsx` — awaits, then navigates\n- `src/pages/Signup.tsx` — awaits after `register()`\n  (continuation line of the same item)\n- `src/cli/auth.ts` — awaits, prints \"Logged in as …\"\n  - nested: **fire-and-forget** in `src/hooks/useAutoLogin.ts` (fine)\n1. tests/auth.spec.ts ×2\n2. a stray ** marker and a lone ` backtick stay literal")]],
   ["u", [P("Great. Also add a regression test that would have caught the race.")]],
   ["a", [P("Here's a test that delays the listener with a fake scheduler so the race is deterministic instead of 1-in-5:"), C("it(\"session is authenticated as soon as login() resolves\", async () => {\n  vi.useFakeTimers();\n  emitter.on(\"auth\", () => new Promise((r) => setTimeout(r, 50)));\n  await login(TEST_USER.user, TEST_USER.pass);\n  expect(store.state).toBe(\"authenticated\");\n  vi.useRealTimers();\n});")]],
-  ["t", [P("Edited: tests/auth.spec.ts (+9 −0)")]],
+  ["s", [TL("Delegated task \"Write the regression test\" finished", "c2d3e4f5")]],
   ["u", [P("What about the table output in the CI log? Paste the summary as a table please.")]],
   ["a", [P("Here's last night's CI summary for this suite (pipes and tabs preserved):"), C("| suite        | runs | fail | p95 ms |\n|--------------|------|------|--------|\n| auth.spec    |  20  |   3  |   412  |\n| session.spec |  20  |   0  |   120  |\n| api.spec     |  20  |   0  |\t 98  |"), P("Note the `|` characters — WoW must escape them or they'd be read as UI codes. |cffff0000 this should NOT turn red|r and |TInterface\\Icons\\INV_Misc_QuestionMark:16|t should not show an icon.")]],
   ["u", [P("Ha, nice test. Now run the full suite 50× to be sure.")]],
   ["a", [P("That needs to run a shell command repeatedly; requesting approval.")]],
-  ["t", [P("Ran: npx vitest run tests/auth.spec.ts --repeat 20\n20 passed")]],
+  ["t", [P("Ran: npx vitest run tests/auth.spec.ts --repeat 20\n20 passed"), TL("Subagent: Check the other login() callers (done)", "c1d2e3f4")]],
   ["a", [P("20/20 locally after the fix (was 17/20). Unicode check for the renderer: café, naïve, Ærøskøbing, “smart quotes”, em — dash, ellipsis…, 日本語, emoji 🙂 (may render as a box in WoW).")]],
   ["u", [P("ok")]],
   ["a", [P(longText())], true],
@@ -112,6 +126,7 @@ const msgs = convo.map(([r, segs, more], k) => ({
 const snapshot = {
   v: 1, sid: "k3f9", seq: 4812, ts: TS, ack: 17, asid: "9f3a01c2", err: null,
   threads,
+  subs,
   focus: {
     id: "a1b2c3d4", model: "claude-opus-5-5", effort: "high",
     // Effort choices as T3 0.1.8 reports them (PROTOCOL D14); Haiku 4.5 has none (picker hidden).
@@ -131,6 +146,8 @@ const snapshot = {
         { id: "deny", label: "Deny" },
       ],
     },
+    kids: kidsA.map(({ id, title, st, t0, t1 }) => ({ id, title, st, t0, t1 })),
+    nkids: kidsA.length,
     msgs,
   },
 };
@@ -138,15 +155,16 @@ const snapshot = {
 // msgs are long: put each on its own line for readability
 function snapshotLua(s) {
   const head = `T3B_IN={v=${s.v},sid=${luaStr(s.sid)},seq=${s.seq},ts=${s.ts},ack=${s.ack},asid=${luaStr(s.asid)},err=nil,\n threads={\n  `
-    + s.threads.map((t) => luaVal(t, "  ")).join(",\n  ") + "},\n";
+    + s.threads.map((t) => luaVal(t, "  ")).join(",\n  ") + "},\n"
+    + " subs={\n  " + s.subs.map((t) => luaVal(t, "  ")).join(",\n  ") + "},\n";
   const f = s.focus;
-  const focus = ` focus={id=${luaStr(f.id)},model=${luaStr(f.model)},effort=${luaStr(f.effort)},\n  models=${luaVal(f.models, "  ")},\n  streaming=${f.streaming},\n  pending=${luaVal(f.pending, "  ")},\n  msgs={\n   `
+  const focus = ` focus={id=${luaStr(f.id)},model=${luaStr(f.model)},effort=${luaStr(f.effort)},\n  models=${luaVal(f.models, "  ")},\n  streaming=${f.streaming},\n  pending=${luaVal(f.pending, "  ")},\n  kids=${luaVal(f.kids, "  ")},nkids=${f.nkids},\n  msgs={\n   `
     + f.msgs.map((m) => luaVal(m, "   ")).join(",\n   ") + "}}}\n";
   return head + focus + `T3B_IN_END=${s.seq}\n`;
 }
 
 const lua = snapshotLua(snapshot);
-const header = "-- T3Bridge reference snapshot (PROTOCOL.md section 2.2). Generated by scripts/dev/make-fixture.js.\n-- 7 threads (running, needs approval, needs input, completed, failed, stopped, idle),\n-- focused thread with 40 messages (code, pipes, tabs, backslashes, unicode, a 5 KB message, more=true) and a pending approval.\n";
+const header = "-- T3Bridge reference snapshot (PROTOCOL.md section 2.2). Generated by scripts/dev/make-fixture.js.\n-- 7 threads (running, needs approval, needs input, completed, failed, stopped, idle), 5 subagent threads (subs, rev 1.4),\n-- focused thread with 40 messages (code, pipes, tabs, backslashes, unicode, a 5 KB message, more=true, thread links),\n-- 2 subagents (focus.kids) and a pending approval.\n";
 const fixturePath = path.join(ROOT, "protocol", "fixtures", "live.sample.lua");
 writeLuaFile(fixturePath, header + lua);
 

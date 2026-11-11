@@ -17,6 +17,26 @@ end
 
 local function thread(tid)
   for _, t in ipairs(snap.threads) do if t.id == tid then return t end end
+  for _, t in ipairs(snap.subs or {}) do if t.id == tid then return t end end -- rev 1.4 subagents
+end
+
+--- rev 1.4: the subagents of tid ({ id, title, st, t0, t1 }) and the breadcrumb root -> tid.
+local function kidsOf(tid)
+  local out = {}
+  for _, t in ipairs(snap.subs or {}) do
+    if t.parent == tid then out[#out + 1] = { id = t.id, title = t.title, st = t.st, need = t.need, t0 = t.t0, t1 = t.t1 } end
+  end
+  return out
+end
+
+local function pathTo(tid)
+  local path, cur, guard = {}, thread(tid), 0
+  while cur and guard < 8 do
+    table.insert(path, 1, { id = cur.id, title = cur.title })
+    cur = cur.parent and thread(cur.parent)
+    guard = guard + 1
+  end
+  return path
 end
 
 local function lastIndex()
@@ -62,15 +82,32 @@ local function focusFor(tid)
   if tid == fixtureFocus.id then return fixtureFocus end
   local t = thread(tid)
   local title = t and t.title or tid
-  return {
+  local kids = kidsOf(tid)
+  local parent = t and t.parent and thread(t.parent)
+  local msgs = nil
+  if #kids > 0 then
+    -- a parent: its history mentions its subagents as links (like T3's subagent items)
+    msgs = { { i = 3, r = "t", ts = (t and t.t0 or ns.Now()) + 8, segs = {}, more = false } }
+    for _, k in ipairs(kids) do msgs[1].segs[#msgs[1].segs + 1] = { "tl", "Subagent: " .. k.title, id = k.id } end
+  end
+  local f = {
     id = tid, model = fixtureFocus.model, effort = fixtureFocus.effort, models = fixtureFocus.models, streaming = false,
     pending = (t and t.need == "input") and { kind = "input", rid = "req-demo-" .. tid,
       text = "Which branch should the workflow deploy from?", options = {} } or nil,
     msgs = {
       { i = 1, r = "u", ts = (t and t.t0) or ns.Now(), segs = { { "p", title } }, more = false },
-      { i = 2, r = "a", ts = (t and t.t0 or ns.Now()) + 5, segs = { { "p", "(Demo) Only the first thread has a full history; this one is a placeholder." } }, more = false },
+      { i = 2, r = "a", ts = (t and t.t0 or ns.Now()) + 5, segs = { { "p", parent
+        and "(Demo) A subagent thread. Use the Up arrow, the breadcrumb or /t3 up to go back to its parent."
+        or "(Demo) Only the first thread has a full history; this one is a placeholder." } }, more = false },
     },
   }
+  for _, m in ipairs(msgs or {}) do f.msgs[#f.msgs + 1] = m end
+  if #kids > 0 then f.kids, f.nkids = kids, #kids end
+  if parent then
+    f.parent = { id = parent.id, title = parent.title }
+    f.path = pathTo(tid)
+  end
+  return f
 end
 
 function DemoMode.Handle(kind, args)
@@ -129,9 +166,11 @@ end
 function DemoMode.Start()
   local raw = ns.DemoSnapshot()
   local delta = ns.Now() - raw.ts
-  for _, t in ipairs(raw.threads) do
-    if t.t0 then t.t0 = t.t0 + delta end
-    if t.t1 then t.t1 = t.t1 + delta end
+  for _, list in ipairs({ raw.threads, raw.subs or {}, raw.focus.kids or {} }) do
+    for _, t in ipairs(list) do
+      if t.t0 then t.t0 = t.t0 + delta end
+      if t.t1 then t.t1 = t.t1 + delta end
+    end
   end
   for _, m in ipairs(raw.focus.msgs) do if m.ts then m.ts = m.ts + delta end end
   raw.sid, raw.seq, raw.asid, raw.ack = "demo", 0, "", 0

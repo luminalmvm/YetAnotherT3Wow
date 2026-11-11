@@ -1,5 +1,5 @@
 -- T3Bridge Messages: scrolling chat history with pooled rows, word-wrapped text, code blocks,
--- light markdown styling (PROTOCOL D14), inline images (rev 1.3, D16), per-message Copy,
+-- light markdown styling (PROTOCOL D14), inline images (rev 1.3, D16), thread links (rev 1.4), per-message Copy,
 -- "Earlier messages", a sticky header for the message at the top edge, and a "jump to latest" button.
 local _, ns = ...
 local Compat, Codec = ns.Compat, ns.Codec
@@ -433,6 +433,90 @@ function View:UpdateImages()
   end
 end
 
+---------------------------------------------------------------------------------------------
+-- Thread links (rev 1.4): { "tl", "<label>", id = "<tid>" } segments, e.g. the 'Delegated task "X"
+-- finished' line or a subagent in a tool run. Link-coloured text; hover underlines it; click opens
+-- that thread in this window.
+---------------------------------------------------------------------------------------------
+Messages.LINK_COLOR = { 0.41, 0.8, 0.94 }       -- |cff69ccf0, the colour of the "Assistant" label
+Messages.LINK_HOVER = { 0.75, 0.93, 1 }
+local LINK_ARROW = "\194\187 "                  -- U+00BB, Latin-1 (the WoW fonts have it)
+
+local function linkOnEnter(self)
+  local c = Messages.LINK_HOVER
+  self.text:SetTextColor(c[1], c[2], c[3])
+  self.line:Show()
+  GameTooltip:SetOwner(self, "ANCHOR_TOP")
+  GameTooltip:SetText("Open this thread")
+  local t = ns.state and self.tid and ns.State.Thread(ns.state, self.tid)
+  if t and not t.ref then
+    local info = ns.State.STATUS[ns.State.StatusKey(t)]
+    GameTooltip:AddLine(Compat.Escape(t.title), 1, 1, 1, true)
+    GameTooltip:AddLine(info.label, info.color[1], info.color[2], info.color[3])
+  end
+  GameTooltip:Show()
+end
+
+local function linkOnLeave(self)
+  local c = Messages.LINK_COLOR
+  self.text:SetTextColor(c[1], c[2], c[3])
+  self.line:Hide()
+  GameTooltip:Hide()
+end
+
+--- Click on a thread link: open that thread (the companion focuses it; Up / the breadcrumb lead back).
+function Messages.OpenLink(tid)
+  if not tid then return false end
+  ns.SelectThread(tid)
+  return true
+end
+
+function View:AcquireLink()
+  self.usedLinks = (self.usedLinks or 0) + 1
+  self.links = self.links or {}
+  local b = self.links[self.usedLinks]
+  if not b then
+    b = CreateFrame("Button", nil, self.child)
+    b.text = b:CreateFontString(nil, "OVERLAY", "ChatFontNormal")
+    b.text:SetJustifyH("LEFT")
+    b.text:SetJustifyV("TOP")
+    b.text:SetWordWrap(true)
+    b.text:SetPoint("TOPLEFT", 0, 0)
+    b.line = b:CreateTexture(nil, "ARTWORK")
+    b.line:SetColorTexture(Messages.LINK_HOVER[1], Messages.LINK_HOVER[2], Messages.LINK_HOVER[3], 0.8)
+    b.line:SetHeight(1)
+    b.line:SetPoint("BOTTOMLEFT", b.text, "BOTTOMLEFT", 0, -1)
+    b.line:SetPoint("BOTTOMRIGHT", b.text, "BOTTOMRIGHT", 0, -1)
+    b.line:Hide()
+    b:SetScript("OnEnter", linkOnEnter)
+    b:SetScript("OnLeave", linkOnLeave)
+    b:SetScript("OnClick", function(self) Messages.OpenLink(self.tid) end)
+    self.links[self.usedLinks] = b
+  end
+  b:ClearAllPoints()
+  b:Show()
+  return b
+end
+
+--- Lay out one thread link segment; returns the new row-relative y.
+function View:LayoutLink(seg, W, y, ry)
+  local b = self:AcquireLink()
+  b.tid = seg.id
+  local c = Messages.LINK_COLOR
+  b.text:SetFontObject(ChatFontNormal)
+  b.text:SetWidth(0)
+  b.text:SetText(LINK_ARROW .. Compat.Escape(seg[2]))
+  local natural = b.text:GetStringWidth() or 0
+  local w = math.max(20, math.min(W - 2 * PAD_X, math.floor(natural + 2)))
+  b.text:SetWidth(w)
+  b.text:SetTextColor(c[1], c[2], c[3])
+  b.line:Hide()
+  local h = (b.text:GetStringHeight() or 12)
+  b:SetSize(w, h + 2)
+  b:SetPoint("TOPLEFT", self.child, "TOPLEFT", PAD_X, -(y + ry))
+  return ry + h + 4
+end
+
 local function rowOnEnter(self) self.copy:Show() end
 local function rowOnLeave(self) if not self:IsMouseOver() then self.copy:Hide() end end
 
@@ -493,7 +577,7 @@ function View:Relayout()
   local W = self:Width()
   self.laidOutWidth = W
   self.child:SetWidth(W)
-  self.usedTexts, self.usedCodes, self.usedImages = 0, 0, 0
+  self.usedTexts, self.usedCodes, self.usedImages, self.usedLinks = 0, 0, 0, 0
   local y = 6
 
   if opts.canLoadEarlier then
@@ -525,6 +609,8 @@ function View:Relayout()
     for _, seg in ipairs(m.segs) do
       if seg[1] == "img" and seg.img then
         ry = self:LayoutImage(seg, W, y, ry)
+      elseif seg[1] == "tl" and seg.id then
+        ry = self:LayoutLink(seg, W, y, ry)
       elseif seg[1] == "p" and styled then
         ry = self:LayoutStyled(seg[2], role, W, y, ry)
       elseif seg[1] == "c" then
@@ -565,6 +651,7 @@ function View:Relayout()
   for k = self.usedTexts + 1, #self.texts do self.texts[k]:Hide() end
   for k = self.usedCodes + 1, #self.codes do self.codes[k]:Hide() end
   for k = self.usedImages + 1, #(self.images or {}) do self.images[k]:Hide(); self.images[k].img = nil end
+  for k = self.usedLinks + 1, #(self.links or {}) do self.links[k]:Hide(); self.links[k].tid = nil end
 
   self.child:SetHeight(math.max(y, 1))
   if #list == 0 then

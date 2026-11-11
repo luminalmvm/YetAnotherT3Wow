@@ -6,6 +6,11 @@
 -- button in the header, or right-click on the header). Collapsed rows are a compact line sorted after
 -- the expanded ones and re-expand by themselves when the thread needs you or fails. When the rows do
 -- not fit on screen, a "N more..." line opens the chat window's thread menu, which lists every thread.
+--
+-- rev 1.4: a row whose thread has subagents shows a badge ("+3", "1 running", "1 needs you"). Clicking the
+-- badge lists the subagents as indented rows under it (collapsed by default, remembered per thread; shown
+-- by themselves while a subagent needs you; hidden while the row itself is collapsed). Click a subagent
+-- row to open it.
 local _, ns = ...
 local Compat, State = ns.Compat, ns.State
 
@@ -14,6 +19,7 @@ local Tracker = {}
 ns.UI.Tracker = Tracker
 
 local HEADER_H, ROW_H, CROW_H, MORE_H, MIN_W = 16, 14, 12, 12, 220
+local KID_H, KID_INDENT, MAX_KID_ROWS = 12, 14, 6   -- subagent rows (rev 1.4)
 local MAX_ROWS = State.MAX_TRACKER_ROWS
 local COLLAPSED_TITLE = 34      -- bytes of title shown on a collapsed row
 local frame, header, rows, moreLine = nil, nil, {}, nil
@@ -43,6 +49,36 @@ end
 local function desiredAnchor()
   if trackerMode() == "free" then return false end
   return questieFrame() or blizzardTracker() or false
+end
+
+--- Subagent lists the user opened (rev 1.4): kidsOpen[tid] = true. Thread ids only, no titles.
+local function kidsOpenMap()
+  if not ns.db then return {} end
+  if type(ns.db.tracker.kids) ~= "table" then ns.db.tracker.kids = {} end
+  return ns.db.tracker.kids
+end
+Tracker.KidsOpenMap = kidsOpenMap
+
+--- Are thread t's subagent rows shown? Open when the user opened them or a subagent needs you.
+function Tracker.KidsShown(t)
+  if not t or (t.kids or 0) == 0 then return false end
+  if (t.kidsNeed or 0) > 0 then return true end
+  return kidsOpenMap()[t.id] == true
+end
+
+function Tracker.ToggleKids(tid)
+  local map = kidsOpenMap()
+  map[tid] = (map[tid] ~= true) and true or nil
+  Tracker.Refresh()
+end
+
+--- Badge for a row with subagents: text, colour. "1 needs you" > "2 running" > "+3".
+function Tracker.KidsBadge(t)
+  local n = t and t.kids or 0
+  if n == 0 then return nil end
+  if (t.kidsNeed or 0) > 0 then return t.kidsNeed .. " needs you", State.STATUS.input.color end
+  if (t.kidsRunning or 0) > 0 then return t.kidsRunning .. " running", State.STATUS.running.timer end
+  return "+" .. n, { 0.62, 0.62, 0.62 }
 end
 
 local function collapsedMap()
@@ -166,6 +202,17 @@ end
 local function rowOnEnter(self)
   local t = self.thread
   if not t then return end
+  if self.child then
+    GameTooltip:SetOwner(self, "ANCHOR_LEFT")
+    GameTooltip:AddLine(Compat.Escape(t.title), 1, 1, 1, true)
+    local info = State.STATUS[State.StatusKey(t)]
+    GameTooltip:AddDoubleLine("Subagent", info.label, 0.7, 0.7, 0.7, info.color[1], info.color[2], info.color[3])
+    local e = State.Elapsed(t, ns.Now())
+    if e then GameTooltip:AddDoubleLine(t.t1 and "Took" or "Elapsed", State.FormatElapsed(e), 0.7, 0.7, 0.7, 1, 0.82, 0) end
+    GameTooltip:AddLine("Click: open this subagent", 0.5, 0.8, 1)
+    GameTooltip:Show()
+    return
+  end
   GameTooltip:SetOwner(self, "ANCHOR_LEFT")
   GameTooltip:AddLine(Compat.Escape(t.title), 1, 1, 1, true)
   local info = State.STATUS[State.StatusKey(t)]
@@ -174,6 +221,9 @@ local function rowOnEnter(self)
   if t.model then GameTooltip:AddDoubleLine("Model", Compat.Escape(t.model), 0.7, 0.7, 0.7, 1, 1, 1) end
   local e = State.Elapsed(t, ns.Now())
   if e then GameTooltip:AddDoubleLine(t.t1 and "Took" or "Elapsed", State.FormatElapsed(e), 0.7, 0.7, 0.7, 1, 0.82, 0) end
+  if (t.kids or 0) > 0 then
+    GameTooltip:AddDoubleLine("Subagents", State.KidsLabel(t.kids, t.kidsRunning, t.kidsNeed):match("%((.*)%)") or tostring(t.kids), 0.7, 0.7, 0.7, 1, 1, 1)
+  end
   GameTooltip:AddLine("Click: open the chat", 0.5, 0.8, 1)
   GameTooltip:AddLine(self.collapsed and "Right-click: expand this row" or "Right-click: collapse this row", 0.5, 0.8, 1)
   GameTooltip:Show()
@@ -181,6 +231,10 @@ end
 
 local function rowOnClick(self, button)
   if not self.thread then return end
+  if self.child then
+    if self.more then ns.UI.OpenChat(self.thread.parent) else ns.UI.OpenChat(self.thread.id) end
+    return
+  end
   if button == "RightButton" then
     Tracker.SetRowCollapsed(self.thread.id)
   else
@@ -208,6 +262,22 @@ local function makeRow(i)
   b.timer = b:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
   b.timer:SetPoint("RIGHT", b, "RIGHT", -2, 0)
   b.timer:SetJustifyH("RIGHT")
+  -- rev 1.4: subagent badge ("+3" / "1 running" / "1 needs you"); click lists the subagents.
+  b.kidsBtn = CreateFrame("Button", nil, b)
+  b.kidsBtn:SetHeight(ROW_H)
+  b.kidsBtn:SetPoint("RIGHT", b.timer, "LEFT", -4, 0)
+  b.kidsBtn.text = b.kidsBtn:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+  b.kidsBtn.text:SetPoint("RIGHT", 0, 0)
+  b.kidsBtn:SetScript("OnClick", function() if b.thread then Tracker.ToggleKids(b.thread.id) end end)
+  b.kidsBtn:SetScript("OnEnter", function(self)
+    GameTooltip:SetOwner(self, "ANCHOR_LEFT")
+    local t = b.thread
+    GameTooltip:SetText(t and State.KidsLabel(t.kids or 0, t.kidsRunning, t.kidsNeed) or "Subagents")
+    GameTooltip:AddLine(b.kidsOpen and "Click: hide the subagents" or "Click: list the subagents here", 0.7, 0.7, 0.7)
+    GameTooltip:Show()
+  end)
+  b.kidsBtn:SetScript("OnLeave", function() GameTooltip:Hide() end)
+  b.kidsBtn:Hide()
   b.title = b:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
   b.title:SetPoint("LEFT", b.icon, "RIGHT", 4, 0)
   b.title:SetPoint("RIGHT", b.timer, "LEFT", -6, 0)
@@ -288,7 +358,7 @@ Tracker.AnchorKind = function() return anchorKind, anchorTarget end
 --- How many of `list` fit in `space` (rows have different heights); leaves room for the
 --- "N more..." line when some do not fit. Returns count, usedHeight.
 function Tracker.Fit(list, space, maxRows)
-  local function h(r) return r.collapsed and CROW_H or ROW_H end
+  local function h(r) return r.child and KID_H or (r.collapsed and CROW_H or ROW_H) end
   local total = 0
   for k = 1, #list do total = total + h(list[k]) end
   if #list <= maxRows and total <= space then return #list, total end
@@ -319,8 +389,33 @@ end
 
 local function hideRow(b)
   b:Hide()
-  b.thread = nil
+  b.thread, b.child, b.more = nil, nil, nil
   if b.pulse:IsPlaying() then b.pulse:Stop() end
+end
+
+--- The tracker list with subagent rows (rev 1.4) inserted after each parent whose list is shown:
+--- { child = true, t = subagent, key, info, elapsed } and, when the parent has more subagents than
+--- rows, { child = true, more = n, t = { parent = tid } }.
+function Tracker.WithKids(list, now)
+  local out = {}
+  for _, r in ipairs(list) do
+    out[#out + 1] = r
+    if not r.collapsed and Tracker.KidsShown(r.t) then
+      local kids, total = State.Kids(ns.state, r.t.id)
+      local n = math.min(#kids, MAX_KID_ROWS)
+      for k = 1, n do
+        local t = kids[k]
+        local key = State.StatusKey(t)
+        local e = State.Elapsed(t, now)
+        out[#out + 1] = { child = true, t = t, key = key, info = State.STATUS[key], elapsed = e and State.FormatElapsed(e) or "" }
+      end
+      if total > n then
+        out[#out + 1] = { child = true, more = total - n, t = { id = r.t.id .. ":more", parent = r.t.id, title = "", st = "idle" },
+          key = "idle", info = State.STATUS.idle, elapsed = "" }
+      end
+    end
+  end
+  return out
 end
 
 function Tracker.Refresh()
@@ -331,7 +426,8 @@ function Tracker.Refresh()
   local map = collapsedMap()
   State.ApplyAutoExpand(map, st)
   State.PruneCollapsed(map, st)
-  local list, total, ncollapsed = State.TrackerRows(st, now, nil, map)
+  local top, total, ncollapsed = State.TrackerRows(st, now, nil, map)
+  local list = Tracker.WithKids(top, now)
   frame:Show()
   local summary
   if not st.snap and not ns.demo then summary = "waiting for the companion" else summary = State.Summary(st, now, map) end
@@ -347,9 +443,45 @@ function Tracker.Refresh()
   local shown, used = 0, 0
   if not collapsed then shown, used = Tracker.Fit(list, rowSpace(), MAX_ROWS) end
   local y = HEADER_H + 3
+  local shownTop = 0
   for i = 1, shown do
     local r = list[i]
     local b = rows[i] or makeRow(i)
+    if not r.child then shownTop = shownTop + 1 end
+    if r.child then
+      -- subagent row (rev 1.4): indented, small, no collapse toggle
+      b.thread, b.collapsed, b.child, b.more = r.t, false, true, r.more
+      b:ClearAllPoints()
+      b:SetHeight(KID_H)
+      b:SetPoint("TOPLEFT", frame, "TOPLEFT", KID_INDENT, -y)
+      b:SetPoint("TOPRIGHT", frame, "TOPRIGHT", 0, -y)
+      y = y + KID_H
+      b.toggle:Hide()
+      b.kidsBtn:Hide()
+      b.icon:SetSize(10, 10)
+      b.title:SetFontObject(GameFontHighlightSmall)
+      if r.more then
+        b.icon:Hide()
+        b.title:SetText(r.more .. " more...")
+        b.title:SetTextColor(0.6, 0.6, 0.6)
+        b.timer:SetText("")
+      else
+        b.icon:SetTexture(r.info.icon)
+        b.icon:Show()
+        b.title:SetText(Compat.Escape(r.t.title))
+        b.title:SetTextColor(r.info.color[1] * 0.9, r.info.color[2] * 0.9, r.info.color[3] * 0.9)
+        b.timer:SetText(r.elapsed)
+        b.timer:SetTextColor(r.info.timer[1], r.info.timer[2], r.info.timer[3])
+      end
+      b.title:ClearAllPoints()
+      b.title:SetPoint("LEFT", b.icon, "RIGHT", 4, 0)
+      b.title:SetPoint("RIGHT", b.timer, "LEFT", -6, 0)
+      b:SetAlpha(offline and 0.55 or 1)
+      if r.info.pulse and not offline and not r.more then
+        if not b.pulse:IsPlaying() then b.pulse:Play() end
+      elseif b.pulse:IsPlaying() then b.pulse:Stop() end
+      b:Show()
+    else
     local c = r.collapsed
     local attention = r.info.group == "needs" or r.key == "failed"
     b.thread, b.collapsed = r.t, c
@@ -371,6 +503,24 @@ function Tracker.Refresh()
     -- collapsed rows show no timer unless the thread needs attention
     b.timer:SetText((c and not attention) and "" or r.elapsed)
     b.timer:SetTextColor(r.info.timer[1], r.info.timer[2], r.info.timer[3])
+    b.child, b.more = nil, nil
+    b.toggle:Show()
+    b.icon:Show()
+    -- subagent badge (rev 1.4)
+    local badge, bc = Tracker.KidsBadge(r.t)
+    b.title:ClearAllPoints()
+    b.title:SetPoint("LEFT", b.icon, "RIGHT", 4, 0)
+    if badge and not c then
+      b.kidsOpen = Tracker.KidsShown(r.t)
+      b.kidsBtn.text:SetText((b.kidsOpen and "- " or "") .. badge)
+      b.kidsBtn.text:SetTextColor(bc[1], bc[2], bc[3])
+      b.kidsBtn:SetWidth(math.max(14, math.ceil(b.kidsBtn.text:GetStringWidth() or 20) + 2))
+      b.kidsBtn:Show()
+      b.title:SetPoint("RIGHT", b.kidsBtn, "LEFT", -4, 0)
+    else
+      b.kidsBtn:Hide()
+      b.title:SetPoint("RIGHT", b.timer, "LEFT", -6, 0)
+    end
     b:SetAlpha(offline and 0.55 or 1)
     if r.info.pulse and not offline then
       if not b.pulse:IsPlaying() then b.pulse:Play() end
@@ -378,10 +528,11 @@ function Tracker.Refresh()
       b.pulse:Stop()
     end
     b:Show()
+    end
   end
   for i = shown + 1, #rows do hideRow(rows[i]) end
 
-  local more = collapsed and 0 or (total - shown)
+  local more = collapsed and 0 or (total - shownTop)
   if more > 0 then
     local m = moreLine or makeMoreLine()
     m:ClearAllPoints()
@@ -402,7 +553,7 @@ function Tracker.Tick()
   if not frame or not frame:IsShown() then return end
   local now = ns.Now()
   for _, b in ipairs(rows) do
-    if b:IsShown() and b.thread then
+    if b:IsShown() and b.thread and not b.more then
       local t = b.thread
       local attention = t.need or t.st == "failed"
       if b.collapsed and not attention then
