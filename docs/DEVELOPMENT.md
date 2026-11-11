@@ -41,7 +41,7 @@ Everything except the in-game checks runs without WoW and without T3 Code. Comma
 | `protocol/vectors/*.png` | `node scripts/dev/gen-vectors.js --check --png` |
 | `companion/test/vectors/*.json` | `cd companion; UPDATE_VECTORS=1 npx vitest run test/vectors.test.ts` |
 | `addon/T3Bridge/Media/icon.tga` | `python art/generate_icon.py` (needs `numpy scipy pillow`, see [art/README.md](../art/README.md)) |
-| `docs/img/*.png` | `python art/make_screenshots.py --source <full screenshot> --out docs/img --mask-titles` |
+| `docs/img/*.png` | `python art/make_screenshots.py --source <full screenshot> --images-source <images screenshot> --out docs/img --mask-titles` |
 
 ## Notes for changes
 

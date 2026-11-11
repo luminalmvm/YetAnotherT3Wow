@@ -71,12 +71,16 @@ WoW caches textures. After you replace `icon.tga`, restart the game completely.
 
 ## README screenshots
 
-`make_screenshots.py` crops the images in `docs/img/` from one full in-game screenshot, which is not
-committed. It always pixelates the local file path in the chat window, and with `--mask-titles` it
-also pixelates selected tracker titles. The script lists every crop and mask box.
+`make_screenshots.py` crops the images in `docs/img/` from two full in-game screenshots, which are not
+committed. From `--source` it makes the chat window, tracker and minimap crops; it always pixelates the
+local file path in the chat window, and with `--mask-titles` it also pixelates selected tracker titles.
+From `--images-source` it makes `images.png` (chat window and image viewer), pixelating every name in
+the game world, including faint ones behind the translucent chat window, and the names and repo path
+inside the nested snip. The script lists every crop and mask box.
 
 ```
 python art/make_screenshots.py --source <full 2000x1125 screenshot.png> --out docs/img --mask-titles
+python art/make_screenshots.py --images-source <full 2559x1439 screenshot.png> --out docs/img
 ```
 
 `docs/img/icon.png` is a copy of `source/icon-128.png`.

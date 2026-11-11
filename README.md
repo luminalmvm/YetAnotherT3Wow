@@ -50,6 +50,8 @@
     <td>Chat window: thread, model (<code>Opus 5.5</code>) and effort (<code>High</code>) pickers, live status.</td>
     <td>Minimap button (upper left of the ring) and the tracker under Questie, with live timers.</td>
   </tr>
+  <tr><td colspan="2"><img src="docs/img/images.png" alt="The chat window with a pasted snip staged above the message box, next to the image viewer showing that snip"></td></tr>
+  <tr><td colspan="2">Paste a snip with Ctrl+V, then click any image to open it in the viewer.</td></tr>
 </table>
 
 ## How it works
