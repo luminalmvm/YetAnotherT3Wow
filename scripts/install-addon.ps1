@@ -10,13 +10,17 @@
                                 or variant B (each slot has live.lua = NTFS hard link to the shared file)
     T3Bridge_TA01..             spike slots, variant A  (used only by /t3 spike s1)
     T3Bridge_TB01..             spike slots, variant B  (used only by /t3 spike s1)
+    T3Bridge_Img\i0001..i<M>.tga  image slots for pictures in chat (512x512 transparent TGAs, ~1 MB each)
+                                plus s1..s3.tga swatches for /t3 spike img
+    T3Bridge_ImgT\t1.tga        one spike swatch in a folder with a TOC
 
   The WoW folder is found automatically (see scripts\lib\WowPath.ps1: -WowPath, $env:T3B_WOW_PATH,
   the companion config, the Blizzard registry keys, Battle.net.config, then a search of common
   folders on every fixed drive). Pass -WowPath if it is not found.
 
   Refuses to change anything while WoW is running (WoW only sees new files when it starts).
-  Only touches folders named T3Bridge, T3Bridge_Live, T3Bridge_S####, T3Bridge_TA##, T3Bridge_TB##.
+  Only touches folders named T3Bridge, T3Bridge_Live, T3Bridge_S####, T3Bridge_TA##, T3Bridge_TB##,
+  T3Bridge_Img and T3Bridge_ImgT.
   Never touches other addons, WTF\ or SavedVariables.
   T3Bridge\Inbox.lua and T3Bridge_Live\live.lua are kept if they already exist (the companion owns them).
 
@@ -29,12 +33,18 @@
   Advanced: install into this AddOns folder directly (skips detection).
 .PARAMETER Interface
   Interface number written into the slot TOCs. Default: the value in addon\T3Bridge\T3Bridge.toc.
+.PARAMETER ImageSlots
+  Number of image slots (default 100, about 105 MB; 0 = no inline images, attachments still work).
+  Each slot shows one image per WoW session; restarting WoW frees them all.
+.PARAMETER ImageToc
+  Also give T3Bridge_Img a TOC (only if /t3 spike img showed that textures need one).
 
 .EXAMPLE
   .\install-addon.ps1 -WhatIf
   .\install-addon.ps1                                   # auto-detect, variant B, 500 slots
   .\install-addon.ps1 -WowPath "<drive>:\World of Warcraft\_forever_"
   .\install-addon.ps1 -Variant A -Slots 2000
+  .\install-addon.ps1 -ImageSlots 200                   # more images per WoW session
 #>
 [CmdletBinding(SupportsShouldProcess = $true)]
 param(
@@ -45,13 +55,16 @@ param(
   [ValidateRange(1, 2000)][int]$Slots = 500,
   [ValidateRange(0, 99)][int]$SpikeSlots = 24,
   [int]$LiveFileSize = 524288,
-  [string]$Interface
+  [string]$Interface,
+  [ValidateRange(0, 2000)][int]$ImageSlots = 100,
+  [switch]$ImageToc
 )
 
 $ErrorActionPreference = "Stop"
 $utf8 = New-Object System.Text.UTF8Encoding $false
 $source = Join-Path $PSScriptRoot "..\addon\T3Bridge" | Resolve-Path | Select-Object -ExpandProperty Path
 . (Join-Path $PSScriptRoot "lib\WowPath.ps1")
+. (Join-Path $PSScriptRoot "lib\ImageSlots.ps1")
 if (-not $Interface) {
   $tocLine = Select-String -LiteralPath (Join-Path $source "T3Bridge.toc") -Pattern '^## Interface:\s*(\d+)' | Select-Object -First 1
   $Interface = $(if ($tocLine) { $tocLine.Matches[0].Groups[1].Value } else { "16001" })
@@ -85,7 +98,7 @@ if ($wow) {
 }
 Write-Host "AddOns: $AddOnsDir"
 Write-Host "Source: $source"
-Write-Host "Variant $Variant, $Slots link slots, $SpikeSlots spike slots per variant, interface $Interface"
+Write-Host "Variant $Variant, $Slots link slots, $SpikeSlots spike slots per variant, $ImageSlots image slots, interface $Interface"
 
 # --- fast hard links ---------------------------------------------------------------------------
 if (-not ("T3B.Native" -as [type])) {
@@ -186,6 +199,14 @@ if ($SpikeSlots -gt 0 -and $PSCmdlet.ShouldProcess("$AddOnsDir\T3Bridge_TA##, T3
   Write-Host "  created $SpikeSlots spike slots per variant"
 }
 
+# --- 5. image slots (PROTOCOL rev 1.3) ---------------------------------------------------------
+$imgMb = [Math]::Round($ImageSlots * 1048594 / 1MB)
+$imgWhat = $(if ($ImageSlots -gt 0) { "Recreate $ImageSlots transparent image slots (~$imgMb MB) and the spike swatches" } else { "Remove the image slot folders" })
+if ($PSCmdlet.ShouldProcess("$AddOnsDir\T3Bridge_Img, T3Bridge_ImgT", $imgWhat)) {
+  $n = Install-T3BImageSlots -AddOnsDir $AddOnsDir -Count $ImageSlots -Toc:$ImageToc -Interface $Interface
+  if ($n -gt 0) { Write-Host "  created $n image slots (~$imgMb MB)$(if ($ImageToc) { ' with a TOC' })" } else { Write-Host "  no image slots (images show as text; attaching still works)" }
+}
+
 if (-not $WhatIfPreference) {
   # sanity check: a hard link and the shared file must be the same file
   if ($Variant -eq "B") {
@@ -194,4 +215,5 @@ if (-not $WhatIfPreference) {
     Write-Host ("  hard link check: " + $(if ($same) { "ok" } else { "MISMATCH" }))
   }
   Write-Host "Done. Start WoW, log in, type /t3 demo (no companion needed). Then start the bridge: scripts\start-bridge.ps1"
+  if ($ImageSlots -gt 0) { Write-Host "Images: in game run /t3 spike img once to check that image slots work on your client." }
 }

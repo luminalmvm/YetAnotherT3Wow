@@ -13,7 +13,11 @@
   and lists them as "needs a full restart of WoW" instead. With WoW closed, those are copied too
   (scripts\install-addon.ps1 remains the full installer).
 
-  It never deletes anything, never touches other addons, the T3Bridge_* slot folders, live.lua,
+  Image slots (T3Bridge_Img, PROTOCOL rev 1.3): if the folder is missing (an install from before
+  images), it is created with -ImageSlots slots while WoW is closed; while WoW runs it is reported
+  as "needs a full restart". Existing image slots are left alone.
+
+  It never deletes anything, never touches other addons, the T3Bridge_* link slot folders, live.lua,
   Inbox.lua, or SavedVariables.
 
 .EXAMPLE
@@ -24,10 +28,12 @@
 param(
   [string]$WowPath,
   [string]$Flavor = "_forever_",
-  [string]$AddOnsDir
+  [string]$AddOnsDir,
+  [ValidateRange(0, 2000)][int]$ImageSlots = 100
 )
 $ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "lib\WowPath.ps1")
+. (Join-Path $PSScriptRoot "lib\ImageSlots.ps1")
 if (-not $AddOnsDir) {
   try { $AddOnsDir = Join-Path (Resolve-WowFlavorPath -WowPath $WowPath -Flavor $Flavor) "Interface\AddOns" }
   catch { Write-Host $_.Exception.Message -ForegroundColor Red; exit 1 }
@@ -79,6 +85,19 @@ foreach ($f in $files) {
   $copied += $rel
 }
 
+# Image slots (rev 1.3): a new folder of new files, so only with WoW closed.
+$imgHave = Get-T3BImageSlotCount $AddOnsDir
+$imgCreated = 0
+if ($imgHave -eq 0 -and $ImageSlots -gt 0) {
+  if ($wowRunning) {
+    $restart += "T3Bridge_Img ($ImageSlots image slots, new folder)"
+  } elseif ($PSCmdlet.ShouldProcess("$AddOnsDir\T3Bridge_Img", "Create $ImageSlots image slots")) {
+    $tocLine = Select-String -LiteralPath (Join-Path $Source "T3Bridge.toc") -Pattern '^## Interface:\s*(\d+)' | Select-Object -First 1
+    $iface = $(if ($tocLine) { $tocLine.Matches[0].Groups[1].Value } else { "16001" })
+    $imgCreated = Install-T3BImageSlots -AddOnsDir $AddOnsDir -Count $ImageSlots -Interface $iface
+  } else { $imgCreated = $ImageSlots }
+}
+
 # Files only in the installed copy are reported, never deleted.
 $extra = Get-ChildItem -LiteralPath $Target -Recurse -File | ForEach-Object { $_.FullName.Substring($Target.Length + 1) } |
   Where-Object { $_ -ne 'Inbox.lua' -and -not (Test-Path -LiteralPath (Join-Path $Source $_)) }
@@ -88,12 +107,15 @@ $verb = $(if ($WhatIfPreference) { "Would copy" } else { "Copied" })
 if ($copied.Count) { Write-Host "$verb ($($copied.Count)):" -ForegroundColor Green; $copied | ForEach-Object { Write-Host "  $_" } }
 else { Write-Host "Nothing to copy." }
 Write-Host "Unchanged: $unchanged"
+if ($imgCreated -gt 0) { Write-Host ("$(if ($WhatIfPreference) { 'Would create' } else { 'Created' }) $imgCreated image slots in T3Bridge_Img (~" + [Math]::Round($imgCreated * 1048594 / 1MB) + " MB)") -ForegroundColor Green }
+elseif ($imgHave -gt 0) { Write-Host "Image slots: $imgHave installed" }
 if ($extra) { Write-Host "Only in the installed copy (left alone):"; $extra | ForEach-Object { Write-Host "  $_" } }
 if ($restart.Count) {
   Write-Host ""
   Write-Host "Needs a full restart of WoW (not copied while WoW runs):" -ForegroundColor Yellow
   $restart | ForEach-Object { Write-Host "  $_" }
   Write-Host "  -> Exit WoW, run scripts\sync-addon.ps1 (or install-addon.ps1) again, then start WoW."
+  Write-Host "     Then in game: /t3 spike img (checks the image slots)."
 }
 Write-Host ""
 if ($copied.Count -and $wowRunning -and -not $WhatIfPreference) { Write-Host "In WoW, type  /reload  and press Enter to load the copied files." -ForegroundColor Cyan }

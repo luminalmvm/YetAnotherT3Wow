@@ -1,6 +1,7 @@
 <#
 .SYNOPSIS
-  Removes the T3Bridge addon folders: T3Bridge, T3Bridge_Live, T3Bridge_S####, T3Bridge_TA##, T3Bridge_TB##.
+  Removes the T3Bridge addon folders: T3Bridge, T3Bridge_Live, T3Bridge_S####, T3Bridge_TA##, T3Bridge_TB##,
+  T3Bridge_Img (image slots) and T3Bridge_ImgT.
 .DESCRIPTION
   Refuses to run while WoW is running. Never touches other addons, WTF\ or SavedVariables.
   Your T3BridgeDB settings stay in WTF\Account\<account>\SavedVariables\T3Bridge.lua; delete that file
@@ -28,7 +29,7 @@ if ($wow -and -not $WhatIfPreference) { Write-Warning "WoW is running. Close it 
 if (-not (Test-Path -LiteralPath $AddOnsDir -PathType Container)) { Write-Error "AddOns folder not found: $AddOnsDir"; exit 1 }
 
 $owned = Get-ChildItem -LiteralPath $AddOnsDir -Directory |
-  Where-Object { $_.Name -match '^T3Bridge(_Live|_S\d{4}|_T[AB]\d{2})?$' }
+  Where-Object { $_.Name -match '^T3Bridge(_Live|_S\d{4}|_T[AB]\d{2}|_Img|_ImgT)?$' }
 if (-not $owned) { Write-Host "Nothing to remove."; exit 0 }
 if ($PSCmdlet.ShouldProcess($AddOnsDir, "Remove $($owned.Count) T3Bridge folders")) {
   $owned | ForEach-Object { Remove-Item -LiteralPath $_.FullName -Recurse -Force }
