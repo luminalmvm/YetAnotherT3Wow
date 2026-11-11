@@ -43,19 +43,21 @@ function run(exe: string, args: string[], timeoutMs: number): Promise<ToolResult
 }
 
 export class HelperImageTools implements ImageTools {
-  private exe: string | null | undefined;
+  private exe: Promise<string | null> | undefined;
   constructor(private readonly configured?: string, private readonly timeoutMs = 20000) {}
 
   /** The first helper that supports the image tools, or null. */
-  async resolveExe(): Promise<string | null> {
-    if (this.exe !== undefined) return this.exe;
-    for (const c of helperCandidates(this.configured)) {
-      const r = await run(c, ["version"], 10000);
-      if (r.code === 0 && r.json && r.json.version >= 2) { this.exe = c; log.info(`image tools: ${c}`); return c; }
-    }
-    log.warn("image tools unavailable: no T3Capture.exe with image support (rebuild: dotnet build -c Release capture-helper/T3Capture)");
-    this.exe = null;
-    return null;
+  resolveExe(): Promise<string | null> {
+    // One lookup, shared by concurrent callers.
+    this.exe ??= (async () => {
+      for (const c of helperCandidates(this.configured)) {
+        const r = await run(c, ["version"], 10000);
+        if (r.code === 0 && r.json && r.json.version >= 2) { log.info(`image tools: ${c}`); return c; }
+      }
+      log.warn("image tools unavailable: no T3Capture.exe with image support (rebuild: dotnet build -c Release capture-helper/T3Capture)");
+      return null;
+    })();
+    return this.exe;
   }
 
   private async tool(args: string[]): Promise<ToolResult> {

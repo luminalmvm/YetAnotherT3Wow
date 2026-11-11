@@ -107,7 +107,7 @@ $verb = $(if ($WhatIfPreference) { "Would copy" } else { "Copied" })
 if ($copied.Count) { Write-Host "$verb ($($copied.Count)):" -ForegroundColor Green; $copied | ForEach-Object { Write-Host "  $_" } }
 else { Write-Host "Nothing to copy." }
 Write-Host "Unchanged: $unchanged"
-if ($imgCreated -gt 0) { Write-Host ("$(if ($WhatIfPreference) { 'Would create' } else { 'Created' }) $imgCreated image slots in T3Bridge_Img (~" + [Math]::Round($imgCreated * 1048594 / 1MB) + " MB)") -ForegroundColor Green }
+if ($imgCreated -gt 0) { Write-Host ("$(if ($WhatIfPreference) { 'Would create' } else { 'Created' }) $imgCreated image slots in T3Bridge_Img (~" + [Math]::Round($imgCreated * 1048594 / 1e6) + " MB)") -ForegroundColor Green }
 elseif ($imgHave -gt 0) { Write-Host "Image slots: $imgHave installed" }
 if ($extra) { Write-Host "Only in the installed copy (left alone):"; $extra | ForEach-Object { Write-Host "  $_" } }
 if ($restart.Count) {

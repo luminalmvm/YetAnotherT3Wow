@@ -200,7 +200,7 @@ if ($SpikeSlots -gt 0 -and $PSCmdlet.ShouldProcess("$AddOnsDir\T3Bridge_TA##, T3
 }
 
 # --- 5. image slots (PROTOCOL rev 1.3) ---------------------------------------------------------
-$imgMb = [Math]::Round($ImageSlots * 1048594 / 1MB)
+$imgMb = [Math]::Round($ImageSlots * 1048594 / 1e6)
 $imgWhat = $(if ($ImageSlots -gt 0) { "Recreate $ImageSlots transparent image slots (~$imgMb MB) and the spike swatches" } else { "Remove the image slot folders" })
 if ($PSCmdlet.ShouldProcess("$AddOnsDir\T3Bridge_Img, T3Bridge_ImgT", $imgWhat)) {
   $n = Install-T3BImageSlots -AddOnsDir $AddOnsDir -Count $ImageSlots -Toc:$ImageToc -Interface $Interface
