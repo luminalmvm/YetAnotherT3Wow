@@ -161,7 +161,8 @@ local function cleanField(v)
   return (v:gsub("[\t\r\n]", " "))
 end
 
-Codec.COMMANDS = { hello = true, focus = true, send = true, model = true, intr = true, ans = true, hist = true, open = true }
+Codec.COMMANDS = { hello = true, focus = true, send = true, model = true, intr = true, ans = true, hist = true, open = true,
+  clip = true, shot = true, unstage = true } -- clip/shot/unstage: PROTOCOL rev 1.3 (D17)
 
 --- Build a command payload. Every field except the free-text last field of send/ans is cleaned of
 --- tabs/newlines. Returns payload string or nil, err.

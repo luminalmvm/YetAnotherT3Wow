@@ -57,17 +57,41 @@ local function normPending(p)
   return out
 end
 
+State.IMG_CANVAS = 512   -- image slot textures are 512x512 (PROTOCOL rev 1.3, D16)
+local IMG_ST = { load = true, full = true, off = true, err = true, old = true }
+
+--- Image fields of an "img" segment or a staged item: { s, w, h, alt, aid, st }. s = slot (0 = none).
+local function normImg(s)
+  local slot = int(s.s)
+  if not slot or slot < 0 or slot > 9999 then slot = 0 end
+  local w, h = int(s.w), int(s.h)
+  if not (w and h and w >= 1 and h >= 1 and w <= State.IMG_CANVAS and h <= State.IMG_CANVAS) then w, h = nil, nil end
+  if slot > 0 and not w then slot = 0 end
+  local aid = (type(s.aid) == "string" and s.aid:find("^[%w_-]+$") and #s.aid <= 16) and s.aid or nil
+  return { s = slot, w = w, h = h, alt = str(s.alt or s.name, 64) or "image", aid = aid,
+    st = (slot == 0) and (IMG_ST[s.st] and s.st or "load") or nil }
+end
+State.NormImage = normImg
+
 local function normMsg(m)
   if type(m) ~= "table" then return nil end
   local i = int(m.i)
   if not i or i < 1 then return nil end
   local segs = {}
   local total = 0
+  local imgsig = ""
   if type(m.segs) == "table" then
     for _, s in ipairs(m.segs) do
       if type(s) == "table" then
         local text = str(s[2])
-        if text and text ~= "" then
+        if s[1] == "img" then
+          -- { "img", "[image: name]", s=, w=, h=, alt=, aid=, st= } (rev 1.3). [2] is the 1.2 text fallback.
+          if #segs < 40 then
+            local img = normImg(s)
+            segs[#segs + 1] = { "img", text or ("[image: " .. img.alt .. "]"), img = img }
+            imgsig = imgsig .. img.s .. (img.st or "") .. ","
+          end
+        elseif text and text ~= "" then
           local kind = (s[1] == "c") and "c" or "p"
           segs[#segs + 1] = { kind, text }
           total = total + #text
@@ -77,7 +101,7 @@ local function normMsg(m)
   end
   return {
     i = i, r = ROLES[m.r] and m.r or "s", ts = int(m.ts), segs = segs, more = (m.more == true),
-    size = total,
+    size = total, imgsig = imgsig,
   }
 end
 
@@ -128,6 +152,20 @@ local function normFocus(f)
       end
     end
   end
+  -- Optional (rev 1.3, D17/D18): staged attachments and a short notice for the focused thread.
+  if type(f.staged) == "table" then
+    out.staged = {}
+    for _, s in ipairs(f.staged) do
+      if type(s) == "table" and #out.staged < 4 then
+        local img = normImg(s)
+        if img.aid then out.staged[#out.staged + 1] = img end
+      end
+    end
+  end
+  if type(f.notice) == "string" and f.notice ~= "" then
+    out.notice = str(f.notice, 200)
+    out.nid = int(f.nid) or 0
+  end
   if type(f.msgs) == "table" then
     local seen = {}
     for _, m in ipairs(f.msgs) do
@@ -167,6 +205,12 @@ function State.Validate(raw, rawEnd)
     end
   end
   snap.focus = normFocus(raw.focus)
+  -- Optional (rev 1.3, D16): image slots left/total and what frees them.
+  if type(raw.imgslots) == "table" and int(raw.imgslots.total) then
+    local total = math.max(0, int(raw.imgslots.total))
+    snap.imgslots = { total = total, left = math.max(0, math.min(total, int(raw.imgslots.left) or 0)),
+      reset = (raw.imgslots.reset == "reload") and "reload" or "restart" }
+  end
   return snap
 end
 
@@ -271,9 +315,36 @@ function State.MessagesSignature(list)
   local parts = {}
   for k, m in ipairs(list) do
     local last = m.segs[#m.segs]
-    parts[k] = m.i .. ":" .. m.size .. ":" .. #m.segs .. ":" .. (last and last[2]:sub(-8) or "") .. (m.more and "+" or "")
+    parts[k] = m.i .. ":" .. m.size .. ":" .. #m.segs .. ":" .. (last and last[2]:sub(-8) or "") .. (m.more and "+" or "") .. (m.imgsig or "")
   end
   return table.concat(parts, "|")
+end
+
+---------------------------------------------------------------------------------------------
+-- Images (rev 1.3): display size, texture coordinates and placeholder text
+---------------------------------------------------------------------------------------------
+--- Fit w x h inside maxW x maxH keeping the aspect ratio, never upscaling (same rule as the companion's displaySize).
+function State.ImageSize(w, h, maxW, maxH)
+  if not (w and h and w > 0 and h > 0) then return maxW, maxH end
+  local s = math.min(1, maxW / w, maxH / h)
+  return math.max(1, floor(w * s + 0.5)), math.max(1, floor(h * s + 0.5))
+end
+
+--- Texture coordinates (left, right, top, bottom) of an image placed at the top-left of a slot texture.
+function State.ImageTexCoords(w, h)
+  return 0, w / State.IMG_CANVAS, 0, h / State.IMG_CANVAS
+end
+
+--- Text for an image without a slot. reset = "reload" | "restart" (what frees slots).
+function State.ImagePlaceholder(img, reset)
+  local st = img and img.st
+  if st == "full" then
+    return "No image slots left: " .. ((reset == "reload") and "/reload" or "restart WoW") .. " to free them"
+  elseif st == "err" then return "Image could not be loaded"
+  elseif st == "old" then return "Image (older message, open T3 Code to view)"
+  elseif st == "off" then return "[image: " .. (img.alt or "image") .. "]"
+  end
+  return "Loading image..."
 end
 
 ---------------------------------------------------------------------------------------------
@@ -476,6 +547,7 @@ end
 function State.LinkStatus(st, now, e)
   e = e or {}
   if e.demo then return "Demo mode (no companion)", "info", false end
+  if e.notice then return e.notice, "warn", false end
   if e.slotsTotal and e.slotsTotal > 0 and e.slotsLeft == 0 then
     return "Link exhausted: click to reload", "bad", true
   end
@@ -489,6 +561,10 @@ function State.LinkStatus(st, now, e)
   end
   if e.slotsTotal == 0 then
     return "Linked (reload-only) " .. State.DOT:sub(2) .. State.Age(st, now) .. "s", "warn", false
+  end
+  local slots = st.snap and st.snap.imgslots
+  if slots and slots.total > 0 and slots.left < 20 then
+    return "Linked" .. State.DOT .. State.Age(st, now) .. "s" .. State.DOT .. "Images: " .. slots.left .. " left", "ok", false
   end
   return "Linked" .. State.DOT .. State.Age(st, now) .. "s", "ok", false
 end

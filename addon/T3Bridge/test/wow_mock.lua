@@ -119,6 +119,7 @@ function Obj:CreateMaskTexture() return new("MaskTexture", self) end
 function Obj:SetTexture(path) self._texture = path; return true end
 function Obj:GetTexture() return self._texture end
 function Obj:SetColorTexture(r, g, b, a) self._color = { r, g, b, a } end
+function Obj:SetTexCoord(...) self._texcoord = { ... } end
 -- Like the real client: a FontString created without an inherited font object has NO font, and
 -- SetText on it raises "Font not set". SetFont on a file the client cannot load returns false
 -- (or raises, with M.fontRaise = true); M.brokenFonts[path] = true makes a real path fail.

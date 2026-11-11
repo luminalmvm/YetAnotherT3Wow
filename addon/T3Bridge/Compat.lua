@@ -2,7 +2,7 @@
 -- Nothing here assumes Retail-only APIs: every call checks first and has a fallback.
 local addonName, ns = ...
 ns.name = addonName
-ns.version = "0.1.0"
+ns.version = "0.2.0"
 
 local Compat = {}
 ns.Compat = Compat

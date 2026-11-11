@@ -17,6 +17,12 @@ local cases = {
   { name = "model_c2", seq = 6, cell = 2, flags = 0, msg = C.BuildCommand("model", "a1b2c3d4", "claude-sonnet-5-5") },
   { name = "model_effort_c2", seq = 11, cell = 2, flags = 0, msg = C.BuildCommand("model", "a1b2c3d4", "claude-opus-5-5", "xhigh") },
   { name = "intr_c4", seq = 7, cell = 4, flags = 0, msg = C.BuildCommand("intr", "b2c3d4e5") },
+  -- PROTOCOL rev 1.3 (D17): image attachments
+  { name = "clip_quiet_c2", seq = 12, cell = 2, flags = 0, msg = C.BuildCommand("clip", "a1b2c3d4", "1") },
+  { name = "shot_c2", seq = 13, cell = 2, flags = 0, msg = C.BuildCommand("shot", "a1b2c3d4") },
+  { name = "unstage_c2", seq = 14, cell = 2, flags = 0, msg = C.BuildCommand("unstage", "a1b2c3d4", "k1") },
+  { name = "send_images_only_c2", seq = 15, cell = 2, flags = 0, msg = C.BuildCommand("send", "a1b2c3d4", SID .. "-15", "") },
+  { name = "hello_img_c2", seq = 16, cell = 2, flags = 0, msg = C.BuildCommand("hello", "1", "0.2.0", "2", "8", "0") },
   { name = "hist_c2", seq = 8, cell = 2, flags = 0, msg = C.BuildCommand("hist", "a1b2c3d4", "93") },
   { name = "boundary_206_c2", seq = 9, cell = 2, flags = 0, msg = C.BuildCommand("send", "a1b2c3d4", SID .. "-9", string.rep("a", 206 - #("send\ta1b2c3d4\t" .. SID .. "-9\t"))) },
   { name = "boundary_207_c2", seq = 10, cell = 2, flags = 0, msg = C.BuildCommand("send", "a1b2c3d4", SID .. "-10", string.rep("b", 207 - #("send\ta1b2c3d4\t" .. SID .. "-10\t"))) },

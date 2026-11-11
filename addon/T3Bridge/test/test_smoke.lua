@@ -193,7 +193,7 @@ end)
 T.test("[" .. CONFIG .. "] hello is sent over the matrix and decodes", function()
   run(1.5)
   local hello
-  for _, p in ipairs(decoded) do if p.payload:find("^hello\t1\t0%.1%.0") then hello = p end end
+  for _, p in ipairs(decoded) do if p.payload:find("^hello\t1\t0%.2%.0\t2\t8\t1$") then hello = p end end -- 5th field: images work (rev 1.3)
   T.ok(hello, "hello decoded (" .. #decoded .. " frames, bad " .. tostring(decoded.bad) .. ")")
   T.eq(ns.Codec.ToHex(hello.sid), ns.outbox:SidHex())
   -- ack it
@@ -953,6 +953,237 @@ T.test("[" .. CONFIG .. "] focus.older drives the Earlier messages button", func
   T.eq(snap.focus.older, false, "parsed")
   snap = St.Validate({ v = 1, sid = "x", seq = 1, threads = {}, focus = { id = "a1", msgs = {}, older = "yes" } }, 1)
   T.eq(snap.focus.older, nil, "wrong type dropped")
+end)
+
+---------------------------------------------------------------------------------------------
+-- Images (PROTOCOL rev 1.3): inline images, viewer, placeholders, chips, attach menu, Ctrl+V
+---------------------------------------------------------------------------------------------
+local IMG_TID = "a1b2c3d4"
+local function withImages(s, opts)
+  opts = opts or {}
+  local msgs = s.focus.msgs
+  local last = msgs[#msgs]
+  last.segs[#last.segs + 1] = { "img", "[image: red.png]", s = 3, w = 320, h = 180, alt = "red.png", aid = "abcd1234" }
+  last.segs[#last.segs + 1] = { "img", "[image: full.png]", s = 0, st = "full", alt = "full.png", aid = "abcd5678" }
+  s.imgslots = { left = opts.left or 5, total = 100, reset = "restart" }
+  if opts.staged ~= false then s.focus.staged = { { aid = "k1", s = 4, w = 64, h = 32, name = "clip-1.png" } } end
+  if opts.notice then s.focus.notice, s.focus.nid = opts.notice, opts.nid or 1 end
+  s.focus.pending = nil
+  s.threads[1].need = nil
+end
+-- The mock's 200 link slots are used up by now, so these tests hand snapshots to the addon directly.
+local function ackImg(opts)
+  seq = seq + 1
+  local s = T.loadSnapshot(T.path("protocol/fixtures/live.sample.lua"))
+  s.seq, s.ts = seq, math.floor(M.epoch)
+  s.asid, s.ack = ns.outbox:SidHex(), ns.outbox.nextSeq - 1
+  withImages(s, opts)
+  ns.ApplySnapshot(s, s.seq, "test")
+  run(0.3)
+end
+local function imageButtons()
+  local out = {}
+  for _, f in ipairs(M.frames) do
+    if f._otype == "Button" and f._shown and f.img and f.tex and f.top then out[#out + 1] = f end
+  end
+  return out
+end
+local function chips()
+  local _, _, _, row, list = ns.UI.ChatInputBar()
+  local out = {}
+  for _, c in ipairs(list or {}) do if c._shown and c.img then out[#out + 1] = c end end
+  return out, row
+end
+
+T.test("[" .. CONFIG .. "] inline image: sized to 240x160 max, cropped with texcoords, texture set when visible", function()
+  ns.UI.OpenChat(IMG_TID)
+  ackImg()
+  local view = ns.UI.ChatView()
+  view:ScrollToBottom()
+  run(0.2)
+  local imgs = imageButtons()
+  local real, ph
+  for _, b in ipairs(imgs) do if b.img.s == 3 then real = b elseif b.img.s == 0 then ph = b end end
+  T.ok(real, "image button for slot 3 (" .. #imgs .. " image buttons)")
+  T.eq(real._w, 242); T.eq(real._h, 137, "320x180 -> 240x135 + 1 px border")
+  T.eq(real.tex._texcoord[2], 0.625); T.eq(real.tex._texcoord[4], 180 / 512)
+  T.eq(real.tex._texture, "Interface\\AddOns\\T3Bridge_Img\\i0003", "lazy texture set once visible")
+  T.ok(ph and ph.label._text:find("restart WoW"), "full-pool placeholder: " .. tostring(ph and ph.label._text))
+  T.ok(not ph.tex._texture, "no texture for a placeholder")
+end)
+
+T.test("[" .. CONFIG .. "] clicking an image opens the viewer; Esc-closable; texcoords match", function()
+  local real
+  for _, b in ipairs(imageButtons()) do if b.img.s == 3 then real = b end end
+  real:Click()
+  local cur, box, tex, vf = ns.UI.ImageViewer.Current()
+  T.ok(vf and vf:IsShown(), "viewer shown")
+  T.eq(cur.alt, "red.png")
+  T.eq(tex._texture, "Interface\\AddOns\\T3Bridge_Img\\i0003")
+  T.eq(tex._texcoord[2], 0.625)
+  local found = false
+  for _, n in ipairs(UISpecialFrames) do if n == "T3BridgeImageViewer" then found = true end end
+  T.ok(found, "registered for Esc")
+  T.ok(box._w >= 322 and box._h >= 182, "at least native size at UI scale 1: " .. box._w .. "x" .. box._h)
+  local w, h = ns.UI.ImageViewer.FitSize(512, 512, 0.5, 2000, 2000)
+  T.eq(w, 768, "capped at 1.5x"); T.eq(h, 768)
+  w, h = ns.UI.ImageViewer.FitSize(512, 256, 1, 300, 300)
+  T.eq(w, 300); T.eq(h, 150, "fits the screen")
+  ns.UI.ImageViewer.Hide()
+end)
+
+T.test("[" .. CONFIG .. "] staged chips: shown above the input, history moves up, remove sends unstage", function()
+  local list, row = chips()
+  T.eq(#list, 1, "one chip")
+  T.ok(row:IsShown(), "chip row shown")
+  T.eq(list[1].tex._texture, "Interface\\AddOns\\T3Bridge_Img\\i0004")
+  T.eq(list[1].tex._texcoord[2], (16 + 32) / 512, "square crop from the middle (64x32)")
+  local _, _, _, _, _, _, chipsShown = ns.UI.ChatInputBar()
+  T.ok(chipsShown, "layout accounts for the chip row")
+  list[1].close:Click()
+  run(1.5)
+  T.eq(lastPayload(), "unstage\t" .. IMG_TID .. "\tk1")
+  ackImg({ staged = false })
+  list = chips()
+  T.eq(#list, 0, "chip gone after the companion dropped it")
+  T.ok(not row:IsShown(), "row hidden")
+end)
+
+T.test("[" .. CONFIG .. "] Ctrl+V in the input sends a quiet clip, debounced; plain V does nothing", function()
+  local eb = editBox()
+  local before = ns.outbox.nextSeq
+  M.fire(eb, "OnKeyDown", "V")
+  run(1.5)
+  T.eq(ns.outbox.nextSeq, before, "no Ctrl: nothing sent")
+  _G.IsControlKeyDown = function() return true end
+  M.fire(eb, "OnKeyDown", "V")
+  M.fire(eb, "OnKeyDown", "V") -- same second: debounced
+  run(1.5)
+  T.eq(lastPayload(), "clip\t" .. IMG_TID .. "\t1")
+  T.eq(ns.outbox.nextSeq, before + 1, "exactly one clip")
+  ackImg({ staged = false })
+  M.fire(eb, "OnKeyDown", "V")
+  run(1.5)
+  T.eq(ns.outbox.nextSeq, before + 2, "accepted again after the debounce")
+  _G.IsControlKeyDown = nil
+  ackImg({ staged = false })
+end)
+
+T.test("[" .. CONFIG .. "] attach menu: MenuUtil, EasyMenu, UIDropDownMenu, or a direct clipboard paste", function()
+  local _, attach = ns.UI.ChatInputBar()
+  local Chat = ns.UI.Chat
+  local built
+  _G.MenuUtil = { CreateContextMenu = function(owner, gen)
+    built = {}
+    local root = { CreateTitle = function(_, t) built[#built + 1] = t end, CreateButton = function(_, t, fn) built[#built + 1] = t; built.fn = built.fn or fn end }
+    gen(owner, root)
+  end }
+  T.eq(Chat.OpenAttachMenu(attach), "menuutil")
+  T.eq(built[2], "Paste image from clipboard (Ctrl+V)"); T.eq(built[3], "Attach latest WoW screenshot")
+  _G.MenuUtil = nil
+  local easy
+  _G.EasyMenu = function(items) easy = items end
+  local path = Chat.OpenAttachMenu(attach)
+  if CONFIG == "modern" or CONFIG == "legacy" then T.eq(path, "easymenu") end
+  T.eq(easy[3].text, "Attach latest WoW screenshot")
+  _G.EasyMenu = nil
+  _G.ToggleDropDownMenu = function() M.toggled = true end
+  T.eq(Chat.OpenAttachMenu(attach), "dropdown")
+  T.ok(M.toggled)
+  _G.ToggleDropDownMenu = nil
+  M.advance(1.1)
+  T.eq(Chat.OpenAttachMenu(attach), "direct")
+  run(1.5)
+  T.eq(lastPayload(), "clip\t" .. IMG_TID .. "\t0", "direct paste is not quiet")
+  ackImg({ staged = false })
+  -- the screenshot item
+  built = nil
+  _G.MenuUtil = { CreateContextMenu = function(owner, gen)
+    local root = { CreateTitle = function() end, CreateButton = function(_, t, fn) if t:find("screenshot") then built = fn end end }
+    gen(owner, root)
+  end }
+  Chat.OpenAttachMenu(attach)
+  built()
+  run(1.5)
+  T.eq(lastPayload(), "shot\t" .. IMG_TID)
+  _G.MenuUtil = nil
+  ackImg()
+end)
+
+T.test("[" .. CONFIG .. "] send with only images staged sends an empty text", function()
+  local eb = editBox()
+  eb:SetText("")
+  eb._scripts.OnEnterPressed(eb)
+  run(1.5)
+  T.eq(lastPayload(), "send\t" .. IMG_TID .. "\t" .. ns.outbox:SidHex() .. "-" .. (ns.outbox.nextSeq - 1) .. "\t")
+  ackImg({ staged = false })
+  local before = ns.outbox.nextSeq
+  eb:SetText("")
+  eb._scripts.OnEnterPressed(eb)
+  run(1.5)
+  T.eq(ns.outbox.nextSeq, before, "nothing staged + empty text: nothing sent")
+end)
+
+T.test("[" .. CONFIG .. "] status bar: 'Images: N left' and short notices", function()
+  ackImg({ left = 12, staged = false })
+  T.eq(ns.state.snap.imgslots.left, 12)
+  local text = ns.State.LinkStatus(ns.state, ns.Now(), { slotsLeft = 100, slotsTotal = 200 })
+  T.ok(text:find("Images: 12 left"), text)
+  ackImg({ left = 12, staged = false, notice = "No image on the clipboard", nid = 7 })
+  T.eq(ns.LinkStatus(), "No image on the clipboard")
+  M.advance(ns.NOTICE_S + 0.5)
+  T.ok(not ns.LinkStatus():find("clipboard"), "notice expires")
+  ackImg({ left = 12, staged = false, notice = "No image on the clipboard", nid = 7 })
+  T.ok(not ns.LinkStatus():find("clipboard"), "same notice id is not shown again")
+end)
+
+T.test("[" .. CONFIG .. "] /t3 spike img steps, and 'fail' turns images into text placeholders", function()
+  M.chat = {}
+  T.ok(M.typeChat("/t3 spike img"))
+  T.ok(chatHas("step 1/3"))
+  T.ok(_G.T3BridgeImgSpike and _G.T3BridgeImgSpike:IsShown(), "swatch window")
+  M.chat = {}
+  T.ok(M.typeChat("/t3 spike img 2"))
+  run(0.2)
+  T.ok(chatHas("load time"), "load time measured")
+  T.ok(chatHas("spike img ok"), "tells the user what to type")
+  local paths = {}
+  for _, f in ipairs(M.frames) do if f._otype == "Texture" and f._shown and type(f._texture) == "string" and f._texture:find("T3Bridge_Img") then paths[f._texture] = true end end
+  T.ok(paths["Interface\\AddOns\\T3Bridge_Img\\s1"] and paths["Interface\\AddOns\\T3Bridge_Img\\n1"], "swatches s1 and n1 shown")
+  T.ok(M.typeChat("/t3 spike img fail"))
+  T.eq(T3BridgeDB.img.works, false)
+  run(1.5)
+  T.eq(lastPayload(), "hello\t1\t0.2.0\t2\t8\t0", "companion told: images off")
+  ackImg()
+  -- images now render as text
+  local textOnly = false
+  for _, f in ipairs(M.frames) do if f._otype == "FontString" and f._shown and f._text == "[image: red.png]" then textOnly = true end end
+  T.ok(textOnly, "[image: red.png] text placeholder")
+  T.eq(#imageButtons(), 0, "no image buttons")
+  T.ok(M.typeChat("/t3 spike img ok"))
+  T.eq(T3BridgeDB.img.works, true)
+  run(1.5)
+  T.eq(lastPayload(), "hello\t1\t0.2.0\t2\t8\t1")
+  T.ok(M.typeChat("/t3 spike img reload no"))
+  T.eq(T3BridgeDB.img.reloadFrees, false)
+  T.ok(M.typeChat("/t3 spike img 3"))
+  _G.T3BridgeImgSpike:Hide()
+  ackImg({ staged = false })
+end)
+
+T.test("[" .. CONFIG .. "] minimum window size 420x360: input, attach, send and chips fit", function()
+  local f = _G.T3BridgeChatFrame
+  f:SetSize(420, 360)
+  ackImg()
+  local eb, attach, send, row, _, holder, chipsShown = ns.UI.ChatInputBar()
+  T.ok(chipsShown and row:IsShown(), "chips shown at minimum size")
+  local _, rel, _, x = holder:GetPoint(2)
+  T.eq(x, -128, "input leaves room for attach (24) + send (80)")
+  T.eq(select(2, attach:GetPoint(1)), holder)
+  T.eq(select(2, send:GetPoint(1)), attach)
+  T.ok(420 - 12 - 128 >= 260, "input box keeps >= 260 px")
+  f:SetSize(520, 560)
+  ackImg({ staged = false })
 end)
 
 T.test("[" .. CONFIG .. "] saved variables hold no message text", function()

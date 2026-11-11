@@ -20,6 +20,9 @@ local DEFAULTS = {
   tracker = { hide = false, collapsed = false, point = nil, mode = "auto", rows = {} },
   chat = { point = nil, w = 520, h = 560 },
   lastFocus = nil,
+  -- Image slots (rev 1.3), set by /t3 spike img: works = true|false|nil (nil = not tested: try them),
+  -- reloadFrees = true|false|nil (does /reload free cached textures?). No image data is stored.
+  img = {},
 }
 
 local function applyDefaults(dst, src)
@@ -96,16 +99,34 @@ function ns.ApplySnapshot(raw, rawEnd, source)
       if result == "reset" then ob.helloSent = false end
       if not ob.helloSent and not State.IsOffline(ns.state, ns.Now()) and snap.asid ~= ob:SidHex() then
         ob.helloSent = true
-        ob:Enqueue("hello", { "1", ns.version, tostring(ns.db and ns.db.cell or 2), "8" })
+        -- 5th field (rev 1.3): "0" = the user marked image slots as not working (/t3 spike img fail).
+        ob:Enqueue("hello", { "1", ns.version, tostring(ns.db and ns.db.cell or 2), "8", ns.ImagesWork() and "1" or "0" })
         if ns.Outbound then ns.Outbound.Kick() end
       end
       ns.EnsureFocus()
     end
+    ns.CheckNotice()
     ns.Fire("model", result)
   else
     ns.Debug("snapshot " .. tostring(source) .. ": " .. result)
   end
   return result
+end
+
+--- Image slots usable on this client? false only after "/t3 spike img fail" (then images show as text).
+function ns.ImagesWork()
+  return not (ns.db and ns.db.img and ns.db.img.works == false)
+end
+
+ns.NOTICE_S = 4
+--- A new focus.notice (rev 1.3, D18) for the open thread is shown in the status bar for a few seconds.
+function ns.CheckNotice()
+  local f = ns.state.snap and ns.state.snap.focus
+  if not f or not f.notice or f.id ~= ns.selected then return end
+  if ns.lastNid == f.nid and ns.lastNoticeText == f.notice then return end
+  ns.lastNid, ns.lastNoticeText = f.nid, f.notice
+  ns.notice = { text = f.notice, untilT = GetTime() + ns.NOTICE_S }
+  ns.Fire("notice", f.notice)
 end
 
 --- Send a command to the companion (or the demo backend). args as in State.Outbox:Enqueue.
@@ -175,6 +196,7 @@ function ns.LinkStatus()
     slotsTotal = I and I.total or 0,
     sending = ns.Outbound and ns.Outbound.Progress() or nil,
     notRespondingAt = ns.notRespondingAt,
+    notice = (ns.notice and GetTime() < ns.notice.untilT) and ns.notice.text or nil,
   }
   return State.LinkStatus(ns.state, ns.Now(), e)
 end

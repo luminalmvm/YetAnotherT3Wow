@@ -4,6 +4,7 @@
 --   /t3 spike s2         outbound matrix geometry + test frames for the capture helper
 --   /t3 spike fonts      does the bundled monospace font load?
 --   /t3 spike templates  which UI templates / APIs exist on this client
+--   /t3 spike img        image slot textures (rev 1.3), see the IMG section at the end
 local _, ns = ...
 local Compat, Codec = ns.Compat, ns.Codec
 
@@ -383,3 +384,182 @@ function Spike.Templates()
 end
 
 ns.On("login", function() Compat.After(2, Spike.DetectMono) end)
+
+---------------------------------------------------------------------------------------------
+-- IMG: image slot textures (PROTOCOL rev 1.3, D16). The addon cannot read pixels, so it shows
+-- swatches labelled with the colour each SHOULD have and the user confirms by eye.
+--   /t3 spike img            step 1: show s2 (loads it into the texture cache), then run the script
+--   /t3 spike img 2          step 2: s1 new-before-first-load, s2 overwrite-after-load, s3 orientation,
+--                            n1 new file after start, t1 folder with a TOC, load time
+--   /t3 spike img 3          after "spike-image-slots.ps1 -Step 2" and /reload: does /reload free textures?
+--   /t3 spike img ok|fail    record whether inline images work (fail = images shown as text)
+--   /t3 spike img reload yes|no   record the /reload result
+-- scripts\spike-image-slots.ps1 writes the colours while WoW runs (the files exist since install).
+---------------------------------------------------------------------------------------------
+local IMG_DIR = "Interface\\AddOns\\T3Bridge_Img\\"
+local IMGT_DIR = "Interface\\AddOns\\T3Bridge_ImgT\\"
+local ICON = "Interface\\AddOns\\T3Bridge\\Media\\icon"
+local SW = 88
+local imgFrame, imgCells = nil, {}
+
+local function imgWindow()
+  if imgFrame then return imgFrame end
+  local tmpl = Compat.FirstTemplate({ "BasicFrameTemplateWithInset" })
+  imgFrame = CreateFrame("Frame", "T3BridgeImgSpike", UIParent, tmpl or Compat.BackdropTemplate())
+  imgFrame:SetSize(6 * (SW + 12) + 20, SW + 96)
+  imgFrame:SetPoint("CENTER", UIParent, "CENTER", 0, 120)
+  imgFrame:SetFrameStrata("DIALOG")
+  imgFrame:SetMovable(true)
+  imgFrame:EnableMouse(true)
+  imgFrame:SetScript("OnMouseDown", function(self) self:StartMoving() end)
+  imgFrame:SetScript("OnMouseUp", function(self) self:StopMovingOrSizing() end)
+  table.insert(UISpecialFrames, "T3BridgeImgSpike")
+  if not tmpl and imgFrame.SetBackdrop then
+    imgFrame:SetBackdrop({ bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background", edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
+      tile = true, tileSize = 32, edgeSize = 32, insets = { left = 11, right = 12, top = 12, bottom = 11 } })
+    local close = CreateFrame("Button", nil, imgFrame, "UIPanelCloseButton")
+    close:SetPoint("TOPRIGHT", -6, -6)
+  end
+  imgFrame.title = imgFrame.TitleText or imgFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+  if not imgFrame.TitleText then imgFrame.title:SetPoint("TOP", 0, -10) end
+  for k = 1, 6 do
+    local c = CreateFrame("Frame", nil, imgFrame)
+    c:SetSize(SW, SW)
+    c:SetPoint("TOPLEFT", imgFrame, "TOPLEFT", 14 + (k - 1) * (SW + 12), -34)
+    c.bg = c:CreateTexture(nil, "BACKGROUND")
+    c.bg:SetColorTexture(0.15, 0.15, 0.15, 1)   -- an "empty" (transparent) texture looks like this
+    c.bg:SetAllPoints(c)
+    c.tex = c:CreateTexture(nil, "ARTWORK")
+    c.tex:SetAllPoints(c)
+    c.name = c:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    c.name:SetPoint("TOP", c, "BOTTOM", 0, -3)
+    c.want = c:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    c.want:SetPoint("TOP", c.name, "BOTTOM", 0, -2)
+    c.want:SetWidth(SW + 10)
+    imgCells[k] = c
+  end
+  return imgFrame
+end
+
+--- cells = { { name, path, want, coords = {l,r,t,b}, time }, ... }. Returns ms spent in the timed SetTexture calls.
+local function showSwatches(title, cells)
+  local f = imgWindow()
+  f.title:SetText(title)
+  local ms = 0
+  for k, c in ipairs(imgCells) do
+    local d = cells[k]
+    if d then
+      c.name:SetText(d.name)
+      c.want:SetText(d.want)
+      local t0 = Compat.ProfileMs()
+      c.tex:SetTexture(d.path)
+      c.tex:SetTexCoord(unpack(d.coords or { 0, 1, 0, 1 }))
+      local dt = Compat.ProfileMs() - t0
+      if d.time then ms = ms + dt end
+      c:Show()
+    else
+      c:Hide()
+    end
+  end
+  f:Show()
+  return ms
+end
+Spike.ShowSwatches = showSwatches
+
+--- Frame times of the next rendered frames (a 1 MB texture load may hitch the first one).
+local function measureFrames(report)
+  local mf = CreateFrame("Frame")
+  local times, last = {}, Compat.ProfileMs()
+  mf:SetScript("OnUpdate", guarded("spike img timing", function(self)
+    local now = Compat.ProfileMs()
+    times[#times + 1] = now - last
+    last = now
+    if #times >= 3 then
+      self:SetScript("OnUpdate", nil)
+      report(times)
+    end
+  end))
+end
+
+local function saveImg(k, v)
+  ns.db.img = ns.db.img or {}
+  ns.db.img[k] = v
+end
+
+function Spike.Img(arg)
+  arg = (arg or ""):lower()
+  local step = arg:match("^(%S*)")
+  if step == "" or step == "1" then
+    out("|cff69ccf0spike img|r step 1/3: loading swatch s2 into the texture cache")
+    showSwatches("T3Bridge image slots: step 1", {
+      { name = "control", path = ICON, want = "T3 icon" },
+      { name = "s2", path = IMG_DIR .. "s2", want = "GREY (installed)" },
+    })
+    ns.spikeImgStep1 = true
+    info("If the control shows the T3 icon and s2 is grey, the slot folder is found.")
+    info("Now in PowerShell (keep WoW running):", "scripts\\spike-image-slots.ps1")
+    info("then type:", "/t3 spike img 2")
+    return
+  elseif step == "2" then
+    if not ns.spikeImgStep1 then info("step 1 was not run in this session", "the s2 cache check below is not meaningful") end
+    out("|cff69ccf0spike img|r step 2/3: compare each swatch with the colour under it")
+    local ms = showSwatches("T3Bridge image slots: step 2", {
+      { name = "control", path = ICON, want = "T3 icon" },
+      { name = "s1 (new)", path = IMG_DIR .. "s1", want = "RED = PASS", time = true },
+      { name = "s2 (cached)", path = IMG_DIR .. "s2", want = "GREY = cached\nGREEN = no cache" },
+      { name = "s3 (crop)", path = IMG_DIR .. "s3", want = "white square\nTOP-LEFT on blue", coords = { 0, 256 / 512, 0, 128 / 512 } },
+      { name = "n1 (new file)", path = IMG_DIR .. "n1", want = "EMPTY expected" },
+      { name = "t1 (TOC dir)", path = IMGT_DIR .. "t1", want = "RED = TOC ok" },
+    })
+    measureFrames(function(times)
+      local typical = (times[2] + times[3]) / 2
+      info(string.format("load time: SetTexture %.1f ms, next frame %.1f ms (typical %.1f ms)", ms, times[1], typical))
+      ns.spikeImgLastMs = times[1]
+    end)
+    info("1) s1 RED: new content shows on first load (required).", "If s1 is red, type /t3 spike img ok")
+    info("   If s1 is grey, empty or the control is missing:", "/t3 spike img fail (images then show as text; attaching still works)")
+    info("2) s2 GREY means a loaded slot keeps its first image (expected: each slot is single-use per session).")
+    info("3) s3: the white square must be at the top-left. n1 should stay empty (new files are not seen).")
+    info("Optional /reload test:", "scripts\\spike-image-slots.ps1 -Step 2, then /reload, then /t3 spike img 3")
+    return
+  elseif step == "3" then
+    out("|cff69ccf0spike img|r step 3/3 (after /reload)")
+    showSwatches("T3Bridge image slots: after /reload", {
+      { name = "control", path = ICON, want = "T3 icon" },
+      { name = "s1", path = IMG_DIR .. "s1", want = "YELLOW = freed\nRED = cached" },
+      { name = "s2", path = IMG_DIR .. "s2", want = "YELLOW = freed\nGREY/GREEN = cached" },
+    })
+    info("YELLOW: /reload frees cached textures:", "/t3 spike img reload yes")
+    info("Otherwise (old colours):", "/t3 spike img reload no")
+    return
+  elseif step == "ok" or step == "fail" then
+    saveImg("works", step == "ok")
+    if step == "ok" then pass("image slots", "inline images on")
+    else fail("image slots", "inline images off: shown as [image: name]; attaching still works") end
+    -- Tell the companion: the next hello carries the image flag.
+    if ns.outbox and not ns.demo then
+      ns.outbox.helloSent = true
+      ns.outbox:Enqueue("hello", { "1", ns.version, tostring(ns.db.cell or 2), "8", ns.ImagesWork() and "1" or "0" })
+      if ns.Outbound then ns.Outbound.Kick() end
+    end
+    ns.Fire("model", "img")
+    return
+  elseif step == "reload" then
+    local yes = arg:match("^reload%s+(%S+)")
+    if yes ~= "yes" and yes ~= "no" then out("usage: /t3 spike img reload yes||no") return end
+    saveImg("reloadFrees", yes == "yes")
+    if yes == "yes" then
+      pass("/reload frees image textures", "to reuse slots after /reload set images.resetOnReload = true in %LOCALAPPDATA%\\T3Bridge\\config.json and restart the bridge")
+    else
+      info("/reload keeps image textures", "slots are freed only by restarting WoW (the default)")
+    end
+    return
+  elseif step == "status" then
+    local img = ns.db.img or {}
+    info("image slots: works " .. tostring(img.works) .. ", /reload frees " .. tostring(img.reloadFrees))
+    local s = ns.state.snap and ns.state.snap.imgslots
+    info("companion: " .. (s and (s.left .. " of " .. s.total .. " slots left") or "no image slot info"))
+    return
+  end
+  out("usage: /t3 spike img [2||3||ok||fail||reload yes||no||status]")
+end

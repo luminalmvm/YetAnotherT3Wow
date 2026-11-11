@@ -1,4 +1,5 @@
--- T3Bridge ChatFrame: the in-game chat window (thread, model and effort pickers, history, prompt, input).
+-- T3Bridge ChatFrame: the in-game chat window (thread, model and effort pickers, history, prompt, input,
+-- image attachments: Attach button + menu, Ctrl+V, staged chips; PROTOCOL rev 1.3).
 local _, ns = ...
 local Compat, State, Codec = ns.Compat, ns.State, ns.Codec
 
@@ -10,6 +11,8 @@ UI.Chat = Chat
 local ICON = "Interface\\AddOns\\T3Bridge\\Media\\icon"
 local MIN_W, MIN_H = 420, 360
 local INPUT_H, STATUS_H = 60, 18
+local CHIPS_H, CHIP = 40, 36          -- staged-attachment row above the input (rev 1.3)
+local PASTE_DEBOUNCE = 1.0            -- s between two Ctrl+V-triggered "clip" commands
 
 local f                    -- the window
 local L = {}               -- layout pieces
@@ -208,7 +211,10 @@ local function submit()
   local eb = L.eb
   local text = trim(eb.t3sendText or eb:GetText() or "")
   eb.t3sendText = nil
-  if text == "" or not ns.selected then return end
+  if not ns.selected then return end
+  local fo0 = State.Focus(ns.state, ns.selected)
+  local staged = (fo0 and fo0.staged and not fo0.pending) and #fo0.staged or 0
+  if text == "" and staged == 0 then return end
   if #text > Codec.MAX_INPUT then
     text = Codec.Utf8Truncate(text, Codec.MAX_INPUT)
     ns.Print("Message cut to 4000 bytes.")
@@ -220,7 +226,10 @@ local function submit()
     L.prompt:MarkSent(text)
   else
     local list = State.Messages(ns.state, tid)
-    echo = { tid = tid, text = text, after = list[#list] and list[#list].i or 0 }
+    -- Staged images go with this message (the companion attaches them); text may be empty then.
+    local shown = text ~= "" and text or ""
+    if staged > 0 then shown = shown .. (shown ~= "" and "\n" or "") .. "(+" .. staged .. (staged == 1 and " image)" or " images)") end
+    echo = { tid = tid, text = shown, after = list[#list] and list[#list].i or 0 }
     ns.Send("send", { tid, text }, { text = text })
   end
   eb:SetText("")
@@ -308,7 +317,156 @@ local function createInput(parent)
   end)
   eb:SetScript("OnEnterPressed", onEnterPressed)
   eb:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+  -- Ctrl+V: WoW pastes only text into an EditBox, so the user's own Ctrl+V in this box also asks the
+  -- companion to attach the clipboard image, if there is one ("clip <tid> 1" = quiet). Text pastes
+  -- still happen normally. This only observes our own EditBox; nothing is injected.
+  eb:HookScript("OnKeyDown", function(_, key) Chat.OnKeyDown(key) end)
   return holder, eb
+end
+
+--- Ctrl+V in the input box (see createInput). Returns true when a clip command was queued.
+function Chat.OnKeyDown(key)
+  if key ~= "V" and key ~= "v" then return false end
+  if not (_G.IsControlKeyDown and IsControlKeyDown()) then return false end
+  return Chat.PasteImage(true)
+end
+
+--- Ask the companion to stage the clipboard image. quiet: no "no image" notice (Ctrl+V). Debounced.
+function Chat.PasteImage(quiet)
+  local tid = ns.selected
+  if not tid or ns.demo then return false end
+  local now = GetTime()
+  if L.lastPaste and now - L.lastPaste < PASTE_DEBOUNCE then return false end
+  L.lastPaste = now
+  ns.Send("clip", { tid, quiet and "1" or "0" })
+  return true
+end
+
+function Chat.AttachScreenshot()
+  local tid = ns.selected
+  if not tid or ns.demo then return false end
+  ns.Send("shot", { tid })
+  return true
+end
+
+local ATTACH_ITEMS = {
+  { text = "Paste image from clipboard (Ctrl+V)", fn = function() Chat.PasteImage(false) end },
+  { text = "Attach latest WoW screenshot", fn = function() Chat.AttachScreenshot() end },
+}
+
+--- Opens the attach menu with whatever menu API the client has. Returns the path used (tests):
+--- "menuutil" (MenuUtil.CreateContextMenu), "easymenu", "dropdown" (UIDropDownMenu), or "direct"
+--- (no menu API: paste from the clipboard right away).
+function Chat.OpenAttachMenu(owner)
+  if ns.demo then ns.Print("Demo mode: attachments need the companion."); return "demo" end
+  local MU = _G.MenuUtil
+  if MU and MU.CreateContextMenu then
+    local ok = pcall(MU.CreateContextMenu, owner, function(_, root)
+      root:CreateTitle("Attach an image")
+      for _, it in ipairs(ATTACH_ITEMS) do root:CreateButton(it.text, it.fn) end
+    end)
+    if ok then return "menuutil" end
+  end
+  local items = { { text = "Attach an image", isTitle = true, notCheckable = true } }
+  for _, it in ipairs(ATTACH_ITEMS) do items[#items + 1] = { text = it.text, func = it.fn, notCheckable = true } end
+  if not L.attachMenu and (_G.EasyMenu or _G.UIDropDownMenu_Initialize) and Compat.TemplateExists("UIDropDownMenuTemplate") then
+    L.attachMenu = Compat.TryCreateFrame("Frame", "T3BridgeAttachMenu", UIParent, "UIDropDownMenuTemplate")
+  end
+  if L.attachMenu and _G.EasyMenu then
+    if pcall(EasyMenu, items, L.attachMenu, owner, 0, 0, "MENU") then return "easymenu" end
+  end
+  if L.attachMenu and _G.UIDropDownMenu_Initialize and _G.ToggleDropDownMenu then
+    local ok = pcall(function()
+      UIDropDownMenu_Initialize(L.attachMenu, function(_, level)
+        for _, it in ipairs(items) do legacyAdd(it.text, { isTitle = it.isTitle, notCheckable = true, func = it.func }, level) end
+      end, "MENU")
+      ToggleDropDownMenu(1, nil, L.attachMenu, owner, 0, 0)
+    end)
+    if ok then return "dropdown" end
+  end
+  Chat.PasteImage(false)
+  return "direct"
+end
+
+---------------------------------------------------------------------------------------------
+-- Staged attachments: a row of 36x36 thumbnails with a remove button, above the input
+---------------------------------------------------------------------------------------------
+local function chipOnEnter(self)
+  if not self.img then return end
+  GameTooltip:SetOwner(self, "ANCHOR_TOP")
+  GameTooltip:SetText(Compat.Escape(self.img.alt or "image"))
+  GameTooltip:AddLine("Sent with your next message. Click to enlarge.", 0.8, 0.8, 0.8)
+  GameTooltip:Show()
+end
+
+local function createChip(parent)
+  local c = CreateFrame("Button", nil, parent)
+  c:SetSize(CHIP, CHIP)
+  UI.Messages.AddImageFrame(c)
+  c.tex = c:CreateTexture(nil, "ARTWORK")
+  c.tex:SetPoint("TOPLEFT", 1, -1)
+  c.tex:SetPoint("BOTTOMRIGHT", -1, 1)
+  c.label = c:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+  c.label:SetPoint("CENTER")
+  c.label:SetText("IMG")
+  c.close = CreateFrame("Button", nil, c)
+  c.close:SetSize(14, 14)
+  c.close:SetPoint("TOPRIGHT", 5, 5)
+  c.close:SetNormalTexture("Interface\\Buttons\\UI-StopButton")
+  c.close:SetHighlightTexture("Interface\\Buttons\\UI-Common-MouseHilight", "ADD")
+  c.close:SetScript("OnClick", function()
+    if c.img and c.img.aid and ns.selected then ns.Send("unstage", { ns.selected, c.img.aid }) end
+  end)
+  c.close:SetScript("OnEnter", function(b) GameTooltip:SetOwner(b, "ANCHOR_TOP"); GameTooltip:SetText("Remove"); GameTooltip:Show() end)
+  c.close:SetScript("OnLeave", function() GameTooltip:Hide() end)
+  c:SetScript("OnEnter", chipOnEnter)
+  c:SetScript("OnLeave", function() GameTooltip:Hide() end)
+  c:SetScript("OnClick", function(self)
+    if self.img and self.img.s > 0 and UI.ImageViewer then UI.ImageViewer.Show(self.img) end
+  end)
+  return c
+end
+
+--- Show the staged list (or hide the row). Returns true when the row is shown.
+function Chat.UpdateChips(staged)
+  local row = L.chips
+  if not row then return false end
+  if not staged or #staged == 0 then
+    row:Hide()
+    for _, c in ipairs(L.chipList) do c:Hide(); c.img = nil end
+    return false
+  end
+  row:Show()
+  local width = row:GetWidth() or 300
+  local fit = math.max(1, math.floor((width - 40) / (CHIP + 8)))
+  local shown = math.min(#staged, fit)
+  for k = 1, shown do
+    local img = staged[k]
+    local c = L.chipList[k] or createChip(row)
+    L.chipList[k] = c
+    c.img = img
+    c:ClearAllPoints()
+    c:SetPoint("LEFT", row, "LEFT", 4 + (k - 1) * (CHIP + 8), 0)
+    if img.s > 0 and ns.ImagesWork() then
+      local slot = img.s
+      if c.slot ~= slot then c.tex:SetTexture(UI.Messages.SlotTexture(slot)); c.slot = slot end
+      -- a square crop of the middle of the image
+      local w, h = img.w, img.h
+      local side = math.min(w, h)
+      local x0, y0 = (w - side) / 2, (h - side) / 2
+      c.tex:SetTexCoord(x0 / State.IMG_CANVAS, (x0 + side) / State.IMG_CANVAS, y0 / State.IMG_CANVAS, (y0 + side) / State.IMG_CANVAS)
+      c.tex:Show(); c.label:Hide()
+    else
+      c.slot = nil
+      c.tex:Hide(); c.label:Show()
+    end
+    c:Show()
+  end
+  for k = shown + 1, #L.chipList do L.chipList[k]:Hide(); L.chipList[k].img = nil end
+  L.chipMore:SetText(#staged > shown and ("+" .. (#staged - shown)) or "")
+  L.chipHint:SetText(#staged == 1 and "1 image attached" or (#staged .. " images attached"))
+  L.chipHint:SetShown(width - 4 - shown * (CHIP + 8) > 120)
+  return true
 end
 
 ---------------------------------------------------------------------------------------------
@@ -431,17 +589,48 @@ local function create()
   L.inputHolder, L.eb = createInput(f)
   L.inputHolder:SetHeight(INPUT_H)
   L.inputHolder:SetPoint("BOTTOMLEFT", f, "BOTTOMLEFT", 12, 6 + STATUS_H + 4)
-  L.inputHolder:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -100, 6 + STATUS_H + 4)
+  L.inputHolder:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -128, 6 + STATUS_H + 4)
+  -- Attach button (rev 1.3): opens the attach menu (clipboard image, latest WoW screenshot).
+  L.attach = CreateFrame("Button", nil, f)
+  L.attach:SetSize(24, 24)
+  L.attach:SetPoint("TOPLEFT", L.inputHolder, "TOPRIGHT", 4, -2)
+  L.attach:SetNormalTexture("Interface\\Icons\\INV_Misc_Note_01")
+  L.attach:SetPushedTexture("Interface\\Icons\\INV_Misc_Note_01")
+  L.attach:SetHighlightTexture("Interface\\Buttons\\ButtonHilight-Square", "ADD")
+  L.attach.edge = L.attach:CreateTexture(nil, "OVERLAY")
+  L.attach.edge:SetTexture("Interface\\Buttons\\UI-Quickslot2")
+  L.attach.edge:SetPoint("TOPLEFT", -9, 9)
+  L.attach.edge:SetPoint("BOTTOMRIGHT", 9, -9)
+  L.attach:SetScript("OnClick", function(self) Chat.OpenAttachMenu(self) end)
+  L.attach:SetScript("OnEnter", function(self)
+    GameTooltip:SetOwner(self, "ANCHOR_TOP")
+    GameTooltip:SetText("Attach an image")
+    GameTooltip:AddLine("Copy an image (e.g. Win+Shift+S), then click here or press Ctrl+V in the message box.", 0.8, 0.8, 0.8, true)
+    GameTooltip:Show()
+  end)
+  L.attach:SetScript("OnLeave", function() GameTooltip:Hide() end)
   L.send = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
   L.send:SetSize(80, 24)
   L.send:SetText("Send")
-  L.send:SetPoint("TOPLEFT", L.inputHolder, "TOPRIGHT", 8, -2)
+  L.send:SetPoint("TOPLEFT", L.attach, "TOPRIGHT", 6, 0)
   L.send:SetScript("OnClick", function() L.eb.t3sendText = nil; submit() end)
   L.stop = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
   L.stop:SetSize(80, 24)
   L.stop:SetText("Stop")
   L.stop:SetPoint("TOPLEFT", L.send, "BOTTOMLEFT", 0, -6)
   L.stop:SetScript("OnClick", function() if ns.selected then ns.Send("intr", { ns.selected }) end end)
+
+  -- staged attachments row (above input; shown only when images are staged)
+  L.chips = CreateFrame("Frame", nil, f)
+  L.chips:SetHeight(CHIPS_H)
+  L.chips:SetPoint("BOTTOMLEFT", L.inputHolder, "TOPLEFT", 0, 4)
+  L.chips:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -12, 6 + STATUS_H + 4 + INPUT_H + 4)
+  L.chips:Hide()
+  L.chipList = {}
+  L.chipMore = L.chips:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+  L.chipMore:SetPoint("RIGHT", L.chips, "RIGHT", -4, 0)
+  L.chipHint = L.chips:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+  L.chipHint:SetPoint("RIGHT", L.chipMore, "LEFT", -6, 0)
 
   -- prompt panel (above input)
   L.prompt = UI.Prompt.Create(f)
@@ -474,17 +663,21 @@ local function create()
   return f
 end
 
---- Place the history above the prompt (if shown) or the input.
-function Chat.Layout(promptH)
+--- Place the history above the prompt (if shown), the staged chips (if any) or the input.
+function Chat.Layout(promptH, chipsShown)
   L.inset:ClearAllPoints()
   local top = (L.template == "PortraitFrameTemplate") and -30 or (L.template == "BasicFrameTemplateWithInset" and -28 or -36)
   L.inset:SetPoint("TOPLEFT", f, "TOPLEFT", 10, top - 34)
+  local below = chipsShown and L.chips or L.inputHolder
+  local extra = chipsShown and (CHIPS_H + 4) or 0
   if promptH > 0 then
+    L.prompt.frame:ClearAllPoints()
+    L.prompt.frame:SetPoint("BOTTOMLEFT", below, "TOPLEFT", 0, 6)
     L.inset:SetPoint("BOTTOMRIGHT", L.prompt.frame, "TOPRIGHT", 2, 6)
-    L.prompt.frame:SetPoint("BOTTOMLEFT", L.inputHolder, "TOPLEFT", 0, 6)
   else
-    L.inset:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -10, 6 + STATUS_H + 4 + INPUT_H + 6)
+    L.inset:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -10, 6 + STATUS_H + 4 + INPUT_H + 6 + extra)
   end
+  L.chipsShown = chipsShown and true or false
 end
 
 ---------------------------------------------------------------------------------------------
@@ -609,7 +802,8 @@ function Chat.Refresh()
   local width = L.inputHolder:GetWidth() or 400
   if width < 100 then width = 400 end
   local promptH = L.prompt:Update(fo and fo.pending or nil, tid, f:GetWidth() - 22)
-  Chat.Layout(promptH)
+  local chipsShown = Chat.UpdateChips(fo and not fo.pending and fo.staged or nil)
+  Chat.Layout(promptH, chipsShown)
 
   -- history
   local list = tid and State.Messages(st, tid) or {}
@@ -647,6 +841,7 @@ function Chat.Refresh()
   local running = t and t.st == "running"
   L.stop:SetShown(running and true or false)
   if tid then L.send:Enable() else L.send:Disable() end
+  if tid and not ns.demo then L.attach:Enable(); L.attach:SetAlpha(1) else L.attach:Disable(); L.attach:SetAlpha(0.5) end
   if L.eb.Instructions then
     L.eb.Instructions:SetText((fo and fo.pending) and "Type an answer - Enter sends" or "Message T3 Code - Enter sends, Shift+Enter adds a line")
   end
@@ -683,6 +878,7 @@ end
 
 --- Test/diagnostic access to the top bar pieces.
 function UI.ChatTopBar() return L.threadDD, L.modelDD, L.effortDD, L.status, L.topWidths, L.statusLimit end
+function UI.ChatInputBar() return L.eb, L.attach, L.send, L.chips, L.chipList, L.inputHolder, L.chipsShown end
 function UI.ChatView() return L.view end
 Chat.ChooseModel = function(id) chooseModel(id) end
 Chat.ChooseEffort = function(v) chooseEffort(v) end
@@ -697,6 +893,10 @@ ns.On("selected", function(tid)
 end)
 ns.On("outbox", function() Chat.RefreshStatus() end)
 ns.On("link", function() Chat.RefreshStatus() end)
+ns.On("notice", function()
+  Chat.RefreshStatus()
+  Compat.After(ns.NOTICE_S + 0.1, function() Chat.RefreshStatus() end)
+end)
 ns.On("tick", function() if f and f:IsShown() then Chat.RefreshStatus() end end)
 ns.On("sendFailed", function(item)
   if item.kind == "send" then

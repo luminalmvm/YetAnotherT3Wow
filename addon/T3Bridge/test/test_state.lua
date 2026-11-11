@@ -376,3 +376,73 @@ T.test("outbox: 4000-byte send becomes 5 long frames", function()
   local c = ob:Start(0)
   T.eq(c.rows, 32); T.eq(#c.frames, 5)
 end)
+
+---------------------------------------------------------------------------------------------
+-- Images (PROTOCOL rev 1.3)
+---------------------------------------------------------------------------------------------
+T.test("img segments: parsed with slot/size, malformed values dropped, text fallback kept", function()
+  local s = assert(S.Validate(snap(1, { focus = { id = "a1", msgs = { { i = 1, r = "u", ts = NOW, segs = {
+    { "p", "look" },
+    { "img", "[image: red.png]", s = 3, w = 320, h = 180, alt = "red.png", aid = "abcd1234" },
+    { "img", "[image: x.png]", s = 0, st = "full", alt = "x.png" },
+    { "img", nil, s = 5, w = 9999, h = 10, alt = "big.png" },          -- size out of range: no slot
+    { "img", "[image: y]", s = "7", w = 10, h = 10, st = "weird" },     -- slot must be a number
+  } } } } }), 1))
+  local segs = s.focus.msgs[1].segs
+  T.eq(#segs, 5)
+  T.eq(segs[1][1], "p")
+  T.eq(segs[2][1], "img"); T.eq(segs[2][2], "[image: red.png]")
+  T.eq(segs[2].img.s, 3); T.eq(segs[2].img.w, 320); T.eq(segs[2].img.h, 180); T.eq(segs[2].img.alt, "red.png"); T.eq(segs[2].img.st, nil)
+  T.eq(segs[3].img.s, 0); T.eq(segs[3].img.st, "full")
+  T.eq(segs[4].img.s, 0, "oversize -> no slot"); T.eq(segs[4][2], "[image: big.png]", "fallback text built")
+  T.eq(segs[5].img.s, 0); T.eq(segs[5].img.st, "load", "unknown state -> load")
+end)
+
+T.test("an addon that predates rev 1.3 would render the img text fallback (kind ~= c -> p)", function()
+  local seg = { "img", "[image: red.png]", s = 3 }
+  T.eq(seg[1] == "c" and "c" or "p", "p")
+  T.eq(seg[2], "[image: red.png]")
+end)
+
+T.test("staged, notice and imgslots are parsed; signature changes when a slot is filled", function()
+  local raw = snap(2, { imgslots = { left = 7, total = 100, reset = "reload" }, focus = { id = "a1", notice = "No image on the clipboard", nid = 4,
+    staged = { { aid = "k1", s = 4, w = 64, h = 32, name = "clip-1.png" }, { aid = "bad aid!", s = 1 }, { aid = "k2", s = 0, name = "x.png" } },
+    msgs = { { i = 1, r = "u", segs = { { "img", "[image: a]", s = 0, st = "load" } } } } } })
+  local s = assert(S.Validate(raw, 2))
+  T.eq(s.imgslots.left, 7); T.eq(s.imgslots.total, 100); T.eq(s.imgslots.reset, "reload")
+  T.eq(#s.focus.staged, 2, "invalid aid dropped")
+  T.eq(s.focus.staged[1].alt, "clip-1.png"); T.eq(s.focus.staged[1].s, 4)
+  T.eq(s.focus.staged[2].s, 0)
+  T.eq(s.focus.notice, "No image on the clipboard"); T.eq(s.focus.nid, 4)
+  local sig1 = S.MessagesSignature(s.focus.msgs)
+  raw.focus.msgs[1].segs[1] = { "img", "[image: a]", s = 9, w = 10, h = 10 }
+  local s2 = assert(S.Validate(raw, 2))
+  T.ok(S.MessagesSignature(s2.focus.msgs) ~= sig1, "relayout when the image becomes ready")
+  T.eq(S.Validate(snap(3, { imgslots = { total = "x" } }), 3).imgslots, nil)
+end)
+
+local function eqList(got, want, msg)
+  T.eq(#got, #want, msg)
+  for k = 1, #want do T.eq(got[k], want[k], (msg or "") .. " [" .. k .. "]") end
+end
+
+T.test("image size, texture coordinates and placeholder texts", function()
+  eqList({ S.ImageSize(512, 256, 240, 160) }, { 240, 120 })
+  eqList({ S.ImageSize(100, 300, 240, 160) }, { 53, 160 })
+  eqList({ S.ImageSize(50, 20, 240, 160) }, { 50, 20 }, "never upscaled")
+  eqList({ S.ImageTexCoords(320, 180) }, { 0, 0.625, 0, 180 / 512 })
+  T.ok(S.ImagePlaceholder({ st = "full" }, "restart"):find("restart WoW"))
+  T.ok(S.ImagePlaceholder({ st = "full" }, "reload"):find("/reload"))
+  T.eq(S.ImagePlaceholder({ st = "load" }), "Loading image...")
+  T.eq(S.ImagePlaceholder({ st = "off", alt = "a.png" }), "[image: a.png]")
+end)
+
+T.test("status line: 'Images: N left' below 20 slots, notice wins for a moment", function()
+  local st = S.New()
+  S.Accept(st, snap(10, { imgslots = { left = 12, total = 100 } }), 10, NOW)
+  local text = S.LinkStatus(st, NOW, { slotsLeft = 100, slotsTotal = 200 })
+  T.ok(text:find("Images: 12 left"), text)
+  S.Accept(st, snap(11, { imgslots = { left = 50, total = 100 } }), 11, NOW)
+  T.ok(not S.LinkStatus(st, NOW, { slotsLeft = 100, slotsTotal = 200 }):find("Images"))
+  T.eq(S.LinkStatus(st, NOW, { slotsLeft = 100, slotsTotal = 200, notice = "No image on the clipboard" }), "No image on the clipboard")
+end)

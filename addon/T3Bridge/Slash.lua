@@ -13,7 +13,8 @@ local HELP = {
   "/t3 - open or close the chat window",
   "/t3 demo - sample threads, no companion needed (again to leave)",
   "/t3 status - link details",
-  "/t3 spike s1 || s1 combat || s2 || fonts || templates - in-game checks",
+  "/t3 spike s1 || s1 combat || s2 || fonts || templates || img - in-game checks",
+  "Images: Attach button next to Send, or Ctrl+V in the message box after copying an image (e.g. Win+Shift+S)",
   function() return "/t3 cell 1||2||4 - outbound cell size in pixels (now " .. ns.db.cell .. ")" end,
   function() return "/t3 hold 100-500 - ms each outbound frame stays visible (now " .. ns.db.hold .. ")" end,
   function()
@@ -46,6 +47,11 @@ local function status()
   local ob = ns.outbox
   ns.Print(string.format("Outbound: session %s, next seq %d, queued %d, cell %d px, hold %d ms",
     ob and ob:SidHex() or "-", ob and ob.nextSeq or 1, ob and ob:Pending() or 0, ns.db.cell, ns.db.hold))
+  local slots = snap and snap.imgslots
+  local img = ns.db.img or {}
+  ns.Print(string.format("Images: %s; slots %s; spike: works %s, /reload frees %s",
+    ns.ImagesWork() and "on" or "off (shown as text)", slots and (slots.left .. " of " .. slots.total .. " left") or "unknown",
+    tostring(img.works), tostring(img.reloadFrees)))
 end
 
 local TRACKER_MODES = { auto = true, below = true, above = true, free = true }
@@ -70,7 +76,8 @@ local function handler(msg)
     elseif which == "s2" then ns.Spike.S2(arg)
     elseif which == "fonts" or which == "font" then ns.Spike.Fonts()
     elseif which == "templates" or which == "template" then ns.Spike.Templates()
-    else ns.Print("usage: /t3 spike s1 || s1 combat || s2 || fonts || templates") end
+    elseif which == "img" or which == "image" or which == "images" then ns.Spike.Img(arg)
+    else ns.Print("usage: /t3 spike s1 || s1 combat || s2 || fonts || templates || img") end
   elseif cmd == "cell" then
     local n = tonumber(rest)
     if n == 1 or n == 2 or n == 4 then ns.db.cell = n; ns.Print("Outbound cell size: " .. n .. " px")

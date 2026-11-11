@@ -1,6 +1,6 @@
 -- T3Bridge Messages: scrolling chat history with pooled rows, word-wrapped text, code blocks,
--- light markdown styling (PROTOCOL D14), per-message Copy, "Earlier messages", a sticky header for
--- the message at the top edge, and a "jump to latest" button.
+-- light markdown styling (PROTOCOL D14), inline images (rev 1.3, D16), per-message Copy,
+-- "Earlier messages", a sticky header for the message at the top edge, and a "jump to latest" button.
 local _, ns = ...
 local Compat, Codec = ns.Compat, ns.Codec
 
@@ -11,6 +11,12 @@ ns.UI.Messages = Messages
 local CHUNK = 2000         -- max characters per FontString
 local PAD_X = 6
 local HEADER_H = 16
+local IMG_MAX_W, IMG_MAX_H = 240, 160   -- inline image size limit (keeps the aspect ratio)
+local PLACEHOLDER_H = 26
+Messages.IMG_MAX_W, Messages.IMG_MAX_H = IMG_MAX_W, IMG_MAX_H
+
+--- Texture path of image slot n (installer: T3Bridge_Img\i0001.tga ...; no extension, like the icon).
+function Messages.SlotTexture(n) return string.format("Interface\\AddOns\\T3Bridge_Img\\i%04d", n) end
 
 local ROLE = {
   u = { label = "You", color = { 1, 0.82, 0 }, body = { 1, 1, 1 } },
@@ -141,7 +147,7 @@ function Messages.Create(parent)
       self:SetVerticalScroll(math.max(0, math.min(max, cur - d * 40)))
     end)
   end
-  v.scroll:HookScript("OnVerticalScroll", function() v:UpdateJump(); v:UpdateSticky() end)
+  v.scroll:HookScript("OnVerticalScroll", function() v:UpdateJump(); v:UpdateSticky(); v:UpdateImages() end)
   v.scroll:HookScript("OnSizeChanged", function()
     if v.relayoutPending then return end
     v.relayoutPending = true
@@ -231,6 +237,7 @@ function View:ScrollToBottom()
     s:SetVerticalScroll(s:GetVerticalScrollRange() or 0)
     self.jump:Hide()
     self:UpdateSticky()
+    self:UpdateImages()
   end
   go()
   Compat.After(0, go) -- the range updates after layout
@@ -317,6 +324,115 @@ function View:AcquireCode()
   return c
 end
 
+--- Thin gold frame + dark backing around an image (native tooltip-like look).
+function Messages.AddImageFrame(b)
+  b.bg = b:CreateTexture(nil, "BACKGROUND")
+  b.bg:SetColorTexture(0, 0, 0, 0.6)
+  b.bg:SetAllPoints(b)
+  b.edges = {}
+  for k, pts in ipairs({ { "TOPLEFT", "TOPRIGHT" }, { "BOTTOMLEFT", "BOTTOMRIGHT" }, { "TOPLEFT", "BOTTOMLEFT" }, { "TOPRIGHT", "BOTTOMRIGHT" } }) do
+    local e = b:CreateTexture(nil, "BORDER")
+    e:SetColorTexture(1, 0.82, 0, 0.7)
+    e:SetPoint(pts[1], b, pts[1], 0, 0)
+    e:SetPoint(pts[2], b, pts[2], 0, 0)
+    if k <= 2 then e:SetHeight(1) else e:SetWidth(1) end
+    b.edges[k] = e
+  end
+end
+
+local function imageOnEnter(self)
+  local img = self.img
+  if not img then return end
+  GameTooltip:SetOwner(self, "ANCHOR_TOP")
+  if img.s > 0 then
+    GameTooltip:SetText("Click to enlarge")
+    GameTooltip:AddLine(Compat.Escape(img.alt or "image"), 0.8, 0.8, 0.8)
+  else
+    GameTooltip:SetText(Compat.Escape(img.alt or "image"))
+  end
+  GameTooltip:Show()
+end
+
+function View:AcquireImage()
+  self.usedImages = (self.usedImages or 0) + 1
+  self.images = self.images or {}
+  local b = self.images[self.usedImages]
+  if not b then
+    b = CreateFrame("Button", nil, self.child)
+    Messages.AddImageFrame(b)
+    b.tex = b:CreateTexture(nil, "ARTWORK")
+    b.tex:SetPoint("TOPLEFT", 1, -1)
+    b.tex:SetPoint("BOTTOMRIGHT", -1, 1)
+    b.label = b:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    b.label:SetPoint("LEFT", 8, 0)
+    b.label:SetPoint("RIGHT", -8, 0)
+    b.label:SetJustifyH("LEFT")
+    b:SetScript("OnEnter", imageOnEnter)
+    b:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    b:SetScript("OnClick", function(self)
+      if self.img and self.img.s > 0 and ns.UI.ImageViewer then ns.UI.ImageViewer.Show(self.img) end
+    end)
+    self.images[self.usedImages] = b
+  end
+  b:ClearAllPoints()
+  b:Show()
+  return b
+end
+
+--- Lay out one image segment at (x, y + ry); returns the new ry. Images that cannot be shown (slots
+--- not working on this client, or the companion has none) become a text line "[image: name]".
+function View:LayoutImage(seg, W, y, ry)
+  local img = seg.img
+  local textOnly = (not ns.ImagesWork or not ns.ImagesWork()) or img.st == "off"
+  if textOnly then
+    local fs = self:AcquireText()
+    fs:SetWidth(W - 2 * PAD_X)
+    fs:SetText(Compat.Escape("[image: " .. (img.alt or "image") .. "]"))
+    fs:SetTextColor(0.6, 0.6, 0.6)
+    fs:SetPoint("TOPLEFT", self.child, "TOPLEFT", PAD_X, -(y + ry))
+    return ry + (fs:GetStringHeight() or 12) + 2
+  end
+  local b = self:AcquireImage()
+  b.img = img
+  local w, h
+  if img.s > 0 then
+    w, h = ns.State.ImageSize(img.w, img.h, math.min(IMG_MAX_W, W - 2 * PAD_X - 2), IMG_MAX_H)
+    w, h = w + 2, h + 2
+    b.tex:SetTexCoord(ns.State.ImageTexCoords(img.w, img.h))
+    b.label:SetText("")
+    b.label:Hide()
+    if b.slot ~= img.s then b.slot = img.s; b.textured = false; b.tex:SetTexture(nil) end
+    b.tex:Show()
+  else
+    w, h = math.min(W - 2 * PAD_X, 260), PLACEHOLDER_H
+    b.slot, b.textured = nil, false
+    b.tex:Hide()
+    local reset = ns.state and ns.state.snap and ns.state.snap.imgslots and ns.state.snap.imgslots.reset
+    b.label:SetText(Compat.Escape(ns.State.ImagePlaceholder(img, reset)))
+    b.label:Show()
+  end
+  b:SetSize(w, h)
+  b:SetPoint("TOPLEFT", self.child, "TOPLEFT", PAD_X, -(y + ry))
+  b.top, b.bottom = y + ry, y + ry + h
+  return ry + h + 4
+end
+
+--- Lazy loading: a slot texture is set only once its image is (nearly) visible, so slots the user
+--- never scrolls to are not loaded (texture memory; the slot itself is single-use either way).
+function View:UpdateImages()
+  if not self.images then return end
+  local off = self.scroll:GetVerticalScroll() or 0
+  local viewH = self.scroll:GetHeight() or 300
+  for k = 1, self.usedImages or 0 do
+    local b = self.images[k]
+    if b.slot and not b.textured and b.bottom and b.bottom >= off - 40 and b.top <= off + viewH + 40 then
+      b.tex:SetTexture(Messages.SlotTexture(b.slot))
+      b.textured = true
+      self.texturesSet = (self.texturesSet or 0) + 1
+    end
+  end
+end
+
 local function rowOnEnter(self) self.copy:Show() end
 local function rowOnLeave(self) if not self:IsMouseOver() then self.copy:Hide() end end
 
@@ -358,6 +474,7 @@ end
 function View:SetMessages(opts)
   local wasAtBottom = self:IsAtBottom() or self.opts == nil
   local sig = ns.State.MessagesSignature(opts.list or {}) .. (opts.canLoadEarlier and "E" or "")
+    .. ((ns.ImagesWork and not ns.ImagesWork()) and "T" or "") -- images shown as text after /t3 spike img fail
   local changed = sig ~= self.sig
   self.opts, self.sig = opts, sig
   if not changed and not opts.forceBottom and self.laidOutWidth == self:Width() then return end
@@ -376,7 +493,7 @@ function View:Relayout()
   local W = self:Width()
   self.laidOutWidth = W
   self.child:SetWidth(W)
-  self.usedTexts, self.usedCodes = 0, 0
+  self.usedTexts, self.usedCodes, self.usedImages = 0, 0, 0
   local y = 6
 
   if opts.canLoadEarlier then
@@ -406,7 +523,9 @@ function View:Relayout()
     local ry = HEADER_H
     local styled = (m.r == "a" or m.r == "u")
     for _, seg in ipairs(m.segs) do
-      if seg[1] == "p" and styled then
+      if seg[1] == "img" and seg.img then
+        ry = self:LayoutImage(seg, W, y, ry)
+      elseif seg[1] == "p" and styled then
         ry = self:LayoutStyled(seg[2], role, W, y, ry)
       elseif seg[1] == "c" then
         local c = self:AcquireCode()
@@ -445,6 +564,7 @@ function View:Relayout()
   self.rowTops.last = y
   for k = self.usedTexts + 1, #self.texts do self.texts[k]:Hide() end
   for k = self.usedCodes + 1, #self.codes do self.codes[k]:Hide() end
+  for k = self.usedImages + 1, #(self.images or {}) do self.images[k]:Hide(); self.images[k].img = nil end
 
   self.child:SetHeight(math.max(y, 1))
   if #list == 0 then
@@ -454,6 +574,7 @@ function View:Relayout()
     self.empty:Hide()
   end
   self:UpdateSticky()
+  self:UpdateImages()
 end
 
 --- One styled paragraph segment (headings, list items with a hanging indent, inline bold/code).

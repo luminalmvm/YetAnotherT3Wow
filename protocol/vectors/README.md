@@ -2,7 +2,7 @@
 
 One JSON file per case (PROTOCOL.md section 3). They were produced by the addon's Lua encoder
 (`python addon/T3Bridge/test/run_tests.py --write-vectors`) and cross-checked by a separate
-JavaScript implementation (`node scripts/dev/gen-vectors.js --check --png`, 13/13 match).
+JavaScript implementation (`node scripts/dev/gen-vectors.js --check --png`, 18/18 match).
 
 | Field | Meaning |
 |---|---|
@@ -18,6 +18,9 @@ Use these images to unit-test the companion decoder without WoW.
 
 `/t3 spike s2` shows four of these in game (`hello_c1`, `focus_c2`, `intr_c4`, `boundary_207_c2`),
 using the same sid/seq/payload, so a live capture can be compared byte for byte.
+
+Rev 1.3 (images) adds `clip_quiet_c2`, `shot_c2`, `unstage_c2`, `send_images_only_c2` (empty text) and
+`hello_img_c2` (5th hello field).
 
 Cases: short commands at cell 1/2/4 (including `model` with the optional effort field, `model_effort_c2`), a retransmit (`flags=1`), UTF-8 text, free text with tab and
 newline, the 206/207-byte boundary where frames switch from 8 to 32 rows, and a 4000-byte `send`
