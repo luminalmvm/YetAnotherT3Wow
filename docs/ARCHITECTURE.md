@@ -5,8 +5,8 @@ T3Bridge has three parts that run on one Windows PC:
 | Part | Language | Job |
 |---|---|---|
 | `addon/T3Bridge` | Lua 5.1 + XML (WoW addon API) | Tracker, chat window, minimap button; reads the live file, draws outbound frames |
-| `companion` | TypeScript on Node 22 (no runtime dependencies) | Talks to the local T3 Code server, writes the live file, decodes outbound frames, runs commands |
-| `capture-helper/T3Capture` | C# / .NET 7+ | Read-only window capture of WoW's top-left strip (Windows.Graphics.Capture) |
+| `companion` | TypeScript on Node 22 (no runtime dependencies) | Talks to the local T3 Code server, writes the live file and image slots, decodes outbound frames, runs commands |
+| `capture-helper/T3Capture` | C# / .NET 7+ | Read-only window capture of WoW's top-left strip (Windows.Graphics.Capture); one-shot clipboard and image-decoding tools |
 
 The wire format in both directions is specified in [protocol/PROTOCOL.md](../protocol/PROTOCOL.md). If code and that file disagree, the file wins.
 
@@ -55,6 +55,17 @@ When you send, switch thread, change model or answer a prompt, the addon draws a
 
 Full numbers: [dev-notes/PHASE0-REPORT-A.md](dev-notes/PHASE0-REPORT-A.md).
 
+## Images (PROTOCOL rev 1.3)
+
+The same "only files that existed at start-up" rule applies to textures, so images use **image slots**:
+
+1. `install-addon.ps1 -ImageSlots 100` creates `Interface\AddOns\T3Bridge_Img\i0001.tga … i0100.tga`, each a fixed 512×512 32-bit TGA (1,048,594 bytes), fully transparent.
+2. For a picture in the focused thread (a T3 `user_message` attachment), the companion fetches the bytes from T3 (`assets.createUrl`), decodes and fits them into 512×512 with the capture helper's `decode` tool (TGA in TypeScript), and overwrites a free slot **in place** with the picture in its top-left corner. Only then does the snapshot name the slot: `{"img","[image: name]",s=12,w=320,h=180,…}`.
+3. The addon shows the slot texture cropped with `SetTexCoord(0, w/512, 0, h/512)` (at most 240×160 inline, up to 512 in the viewer), and sets the texture only once the image scrolls into view.
+4. WoW caches a texture the first time it is used, so each slot shows one picture per WoW session. The companion tracks used slots per WoW process (pid + start time, `imgslots.json`); a WoW restart frees all of them. At most 8 new pictures per snapshot, only for the newest 40 messages. On a clean stop every used slot is blanked again.
+
+Sending pictures: Ctrl+V in the message box or the Attach button sends `clip` (the helper's `clipboard` tool reads the Windows clipboard) or `shot` (newest WoW screenshot). The companion keeps the staged files in `%LOCALAPPDATA%\T3Bridge\tmp`, shows thumbnails in their own slots, and on `send` uploads them to T3 (`attachments.createUploadUrl` + a signed POST) and attaches them to `message.dispatch`. `/t3 spike img` (with `scripts\spike-image-slots.ps1`) checks on the real client that an overwritten, never-loaded slot shows the new picture; `/t3 spike img fail` makes images fall back to `[image: name]` text.
+
 ## Addon layout
 
 | File | Role |
@@ -64,12 +75,12 @@ Full numbers: [dev-notes/PHASE0-REPORT-A.md](dev-notes/PHASE0-REPORT-A.md).
 | `State.lua` | Snapshot validation, tracker rules, cadence, link status |
 | `Core.lua` | Settings (`T3BridgeDB`), events, sending |
 | `Inbound.lua` / `Outbound.lua` | Slot polling / matrix drawing and retransmits |
-| `UI/*.lua` | Tracker, chat window, messages (light markdown), prompts, minimap button, copy dialog |
+| `UI/*.lua` | Tracker, chat window (attach menu, staged images), messages (light markdown, inline images), image viewer, prompts, minimap button, copy dialog |
 | `Demo.lua`, `DemoMode.lua` | `/t3 demo` data (generated from `protocol/fixtures/live.sample.lua`) |
 | `Spike.lua` | In-game self-tests (`/t3 spike …`) |
 | `Slash.lua` | `/t3` commands, each run in a protected call |
 
-SavedVariables (`T3BridgeDB`) store only positions, settings and per-thread collapse state keyed by thread id. They never contain titles or message text.
+SavedVariables (`T3BridgeDB`) store only positions, settings, per-thread collapse state keyed by thread id and the image spike result (`img.works`, `img.reloadFrees`). They never contain titles, message text or images.
 
 ## Development history
 

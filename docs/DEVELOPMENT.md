@@ -28,6 +28,8 @@ Everything except the in-game checks runs without WoW and without T3 Code. Comma
 - `scripts/sync-addon.ps1` copies changed addon files into the installed addon (it refuses new files and TOC changes while WoW runs, because the client only lists files at start-up), then `/reload`.
 - `scripts/dev/set-live-file.ps1 -Loop` stands in for the companion with the reference fixture; `-Spike -Loop` feeds `/t3 spike s1`.
 - `/t3 spike s2` flashes four reference frames (also in `protocol/vectors`) for 3 s each, so a live capture can be compared byte for byte.
+- `/t3 spike img` + `scripts/spike-image-slots.ps1` check image slots on the real client (new content before first load, caching, `/reload`, new files, orientation, load time).
+- Image tools without WoW: `T3Capture.exe decode --in <img> --max 512 --out <raw>` (also `clipboard`, `convert`, `procinfo`, `version`; see [capture-helper/README.md](../capture-helper/README.md)).
 - `/t3 debug` and `/t3 log` show the addon's debug lines; the companion logs to `%LOCALAPPDATA%\T3Bridge\companion.log` (`--log-level debug` for more).
 
 ## Regenerating generated files
@@ -44,5 +46,5 @@ Everything except the in-game checks runs without WoW and without T3 Code. Comma
 ## Notes for changes
 
 - Keep the protocol backward compatible where possible and record changes in the change list at the top of [PROTOCOL.md](../protocol/PROTOCOL.md).
-- The addon must never create files at run time or rely on files created after login.
+- The addon must never create files at run time or rely on files created after login. The companion never creates image slot files either; it only overwrites them in place.
 - Fixtures under `docs/fixtures` are redacted captures of real server responses with fake ids and shifted timestamps. Never add real ids, titles, paths or tokens.

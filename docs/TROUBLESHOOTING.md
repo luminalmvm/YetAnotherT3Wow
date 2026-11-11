@@ -65,3 +65,20 @@ The companion uses T3's undocumented local API (orchestration protocol 2). A T3 
 ## Reporting a bug
 
 Include: the client version, `/t3 status` output, relevant `companion.log` lines and any `Lua error` lines. Check that they contain no private thread text before posting.
+
+## Images
+
+**Pictures show as `[image: name]` text**
+Image slots are not installed or turned off. Close WoW, run `.\scripts\install-addon.ps1` (or `.\scripts\sync-addon.ps1`, which adds the missing `T3Bridge_Img` folder), start WoW and run `/t3 spike img`. If you answered `/t3 spike img fail` earlier, `/t3 spike img ok` turns them back on.
+
+**"Loading image..." stays**
+Check `companion.log` for `image tools unavailable`: rebuild the capture helper (`dotnet build -c Release capture-helper\T3Capture`). The companion skips an older helper copy in `%LOCALAPPDATA%\T3Bridge\capture` automatically; `install-companion.ps1` refreshes that copy.
+
+**"No image slots left: restart WoW to free them"**
+Each slot shows one picture per WoW session. Restart WoW, or reinstall with more slots (`-ImageSlots 200`, WoW closed). If `/t3 spike img 3` showed that `/reload` frees textures, set `"images": {"resetOnReload": true}` in `%LOCALAPPDATA%\T3Bridge\config.json` and restart the bridge; the hint then says `/reload`.
+
+**Ctrl+V does nothing**
+Copy an image first (Win+Shift+S, or Copy on an image or an image file). Ctrl+V works while the message box has focus; a text-only clipboard is ignored quietly. The Attach button next to Send does the same and says "No image on the clipboard" if there is none. "Attach latest WoW screenshot" needs a screenshot from the last 15 minutes.
+
+**An image could not be sent**
+T3 accepts PNG, JPEG, GIF and WebP up to 10 MB; other files are converted (TGA to PNG, the rest to JPEG). The status bar shows the error; staged images stay attached, so you can send again.

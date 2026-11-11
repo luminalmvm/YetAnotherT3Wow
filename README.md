@@ -36,6 +36,7 @@
 - **Model and effort pickers.** Change the thread's model and reasoning effort from the window's dropdowns.
 - **Collapsible rows.** Right-click a row (or its +/−) to fold it; rows that need you expand again by themselves.
 - **Approvals and questions.** Allow / deny tool requests and answer agent questions in game.
+- **Images.** Pictures in a thread show inline (click to enlarge). Attach a copied image (Ctrl+V in the message box, or the Attach button) or your latest WoW screenshot.
 - **Minimap button.** Opens the window; finds a free spot on the ring and can be dragged.
 - **No screen flash.** Outgoing commands are a tiny black-and-white strip in the top-left corner (2 px cells, about 0.2 s), only when you act.
 - **Local only.** The companion talks to T3 Code on `127.0.0.1` and nothing else.
@@ -89,14 +90,14 @@ Run these in PowerShell. If scripts are blocked, prefix them with `powershell -E
    node companion\dist\main.js --status     # checks discovery, credential and paths
    ```
    If `--login` cannot find the T3 CLI (`%USERPROFILE%\.t3\bin\t3.cmd`), create a one-time pairing token with `t3 pair --scope orchestration:read --scope orchestration:operate` and paste it into `node companion\dist\main.js --pair` (it reads the token from standard input). More in [docs/t3-api-notes.md](docs/t3-api-notes.md#2-authentication).
-5. **Close WoW**, then install the addon. The script looks for your WoW folder (registry, Battle.net settings, common folders). Try `-WhatIf` first to see what it would do.
+5. **Close WoW**, then install the addon (it also creates 100 image slots, about 105 MB; `-ImageSlots 0` skips them). The script looks for your WoW folder (registry, Battle.net settings, common folders). Try `-WhatIf` first to see what it would do.
    ```powershell
    .\scripts\install-addon.ps1 -WhatIf
    .\scripts\install-addon.ps1
    # not found? point it at the folder that holds Interface\AddOns:
    .\scripts\install-addon.ps1 -WowPath "<drive>:\World of Warcraft\_forever_"
    ```
-6. **Start WoW**, make sure *T3Bridge* is ticked in the AddOns list, log in. You should see the T3 button on the minimap. `/t3 demo` shows sample data without the bridge.
+6. **Start WoW**, make sure *T3Bridge* is ticked in the AddOns list, log in. You should see the T3 button on the minimap. `/t3 demo` shows sample data without the bridge. Run `/t3 spike img` once to check image slots on your client (it guides you).
 7. **Start the bridge.**
    ```powershell
    .\scripts\start-bridge.ps1            # hidden; add -Console for a log window
@@ -110,6 +111,7 @@ Stop with `.\scripts\stop-bridge.ps1`: it also clears the live file, so no conve
 <summary><b>Variants and advanced options</b></summary>
 
 - `install-addon.ps1 -Slots 2000` gives longer sessions before "Link low: click to reload" (each poll uses one slot).
+- `-ImageSlots 200` allows more pictures per WoW session; `-ImageSlots 0` turns inline images off (they show as `[image: name]`; attaching still works).
 - `-Variant A` makes slot TOCs point at `..\T3Bridge_Live\live.lua` instead of hard links (for file systems without hard links).
 - `-Flavor _classic_era_` (or any flavour folder) targets another client. Untested.
 - `scripts\install-companion.ps1` does steps 2–4 in one go and writes `%LOCALAPPDATA%\T3Bridge\config.json` (every key: [companion/src/config.ts](companion/src/config.ts)). The WoW folder can also come from the `T3B_WOW_PATH` environment variable.
@@ -140,12 +142,15 @@ Your settings stay in `WTF\Account\<account>\SavedVariables\T3Bridge.lua`; delet
 | `/t3 reset` | Reset window, tracker and minimap button positions |
 | `/t3 cell 1\|2\|4` · `/t3 hold 100-500` | Outbound cell size (px) and how long each frame shows (ms) |
 | `/t3 spike s1\|s1 combat\|s2\|fonts\|templates` | In-game self-tests |
+| `/t3 spike img` | Guided image slot check (with `scripts\spike-image-slots.ps1`); `ok`/`fail` records the result |
+| Ctrl+V · Attach button | Attach the copied image (e.g. Win+Shift+S) or the latest screenshot; sent with your next message |
 | `/t3 reload` | Reload the UI to refill link slots |
 | `/t3 debug` · `/t3 log` | Debug messages and recent debug lines |
 
 | Script (`scripts\`) | What it does |
 |---|---|
-| `install-addon.ps1` / `uninstall-addon.ps1` | Install or remove the addon and its slots (`-WowPath`, `-Slots`, `-Variant`, `-WhatIf`) |
+| `install-addon.ps1` / `uninstall-addon.ps1` | Install or remove the addon and its slots (`-WowPath`, `-Slots`, `-ImageSlots`, `-Variant`, `-WhatIf`) |
+| `spike-image-slots.ps1` | Writes test colours for `/t3 spike img` while WoW runs (`-Step 2` for the `/reload` test) |
 | `sync-addon.ps1` | Copy changed addon files into an installed addon |
 | `start-bridge.ps1` / `stop-bridge.ps1` | Start (`-Console`, `-Demo`) or stop the companion (`-Clear` after a crash) |
 | `install-companion.ps1` / `uninstall-companion.ps1` | Build, configure, authorise, autostart / remove |
@@ -156,7 +161,7 @@ Your settings stay in `WTF\Account\<account>\SavedVariables\T3Bridge.lua`; delet
 - **What it does not do:** no input injection, no key or mouse automation, no memory reading, no game file changes outside the T3Bridge addon folders. The addon never moves, targets or casts.
 - **Capture is read-only:** the helper captures only the WoW window's top-left strip (1100×200 px by default) through Windows.Graphics.Capture, the same API screen recorders use.
 - **Local only:** the companion connects to `127.0.0.1` only. The token is stored DPAPI-encrypted for your Windows user; the log never contains tokens or message text.
-- **Privacy:** `live.lua` holds the open thread's text while the bridge runs, and is overwritten with an empty snapshot on stop.
+- **Privacy:** `live.lua` holds the open thread's text while the bridge runs, and is overwritten with an empty snapshot on stop; image slots are blanked on stop too.
 - Unofficial and **use at your own risk**. Not affiliated with or endorsed by Blizzard Entertainment or T3 Tools.
 
 ## Known limitations
@@ -166,14 +171,17 @@ Your settings stay in `WTF\Account\<account>\SavedVariables\T3Bridge.lua`; delet
 - A changed icon texture needs a full WoW restart, not just `/reload`.
 - T3 Code's local API is undocumented and nightly; an update can break the companion.
 - Changing the model or effort in game changes the real T3 thread.
+- Each image slot shows one picture per WoW session (WoW caches textures); after the last one, restarting WoW frees them all. Pictures are shown at most 512×512.
+- Ctrl+V cannot paste the image itself into the message box (WoW pastes text only); it tells the companion to attach the clipboard image, which costs one short matrix flash.
+- Image slots use about 105 MB of disk (100 × 1 MB TGA files).
 
 ## Repository
 
 | Path | Contents |
 |---|---|
 | [`addon/T3Bridge`](addon/T3Bridge) | The WoW addon (Lua, XML) and its offline tests |
-| [`companion`](companion) | Node/TypeScript companion: T3 client, live-file writer, frame decoder |
-| [`capture-helper`](capture-helper) | .NET window-capture helper and a synthetic test window |
+| [`companion`](companion) | Node/TypeScript companion: T3 client, live-file writer, frame decoder, image slots |
+| [`capture-helper`](capture-helper) | .NET window-capture helper (also clipboard and image decoding) and a synthetic test window |
 | [`protocol`](protocol) | Wire contract, fixtures and test vectors |
 | [`scripts`](scripts) | Install, sync, start/stop; `scripts/dev` holds developer tools |
 | [`docs`](docs) | [Architecture](docs/ARCHITECTURE.md), [development](docs/DEVELOPMENT.md), [troubleshooting](docs/TROUBLESHOOTING.md), [T3 API notes](docs/t3-api-notes.md) |

@@ -1,11 +1,41 @@
-# T3Bridge wire protocol, v1 (revision 1.2)
+# T3Bridge wire protocol, v1 (revision 1.3)
 
+> **Revision 1.3 (images, 2026-11-11), backward compatible, wire version stays `1`:** D16 adds image slot
+> textures and `{"img", …}` message segments plus top-level `imgslots`; D17 adds staged attachments
+> (`focus.staged`), the outbound commands `clip`, `shot`, `unstage`, image-only `send`, and an optional 5th
+> `hello` field; D18 adds `focus.notice`/`focus.nid`. A 1.2 addon shows each image as the text
+> `[image: name]` (the segment's 2nd element) and ignores the other new fields; a 1.2 companion never sends
+> them and ignores the new commands with an `err` ("unknown command").
+>
+> **Deviations from the images design (IMAGES-DESIGN v1), with reasons:**
+> 1. Decoding and resizing run in the capture helper (`T3Capture decode`, Windows Imaging Component) instead of
+>    the `sharp` npm package: the companion keeps zero runtime npm dependencies (no native binaries), the helper
+>    is already built and shipped, and WIC applies EXIF orientation and high-quality (Fant) scaling. TGA (which
+>    WIC cannot read) is decoded in TypeScript. The TGA slot writer, sizing and pool stay in TypeScript as designed.
+> 2. Slot files are overwritten **in place** (same size, offset 0), like `live.lua`, not written as temp + rename:
+>    no new directory entry is ever created for a file the client indexed at start-up.
+> 3. The `img` segment carries a text fallback as its 2nd element (`"[image: name]"`), so 1.2 addons need no
+>    extra `p` segment; `st` (load/full/off/err/old) says why a segment has no slot.
+> 4. Additions: `focus.nid` (so a repeated notice is shown once), `imgslots.reset` (what frees slots, for the
+>    placeholder text), and the `hello` image flag (the addon tells the companion when the user marked image
+>    slots as broken, so it stops writing slots).
+> 5. The spike uses dedicated swatch files (`T3Bridge_Img\s1..s3.tga`, a new file `n1.tga`, and `T3Bridge_ImgT\t1.tga`
+>    in a folder with a TOC) instead of real slots; `install-addon.ps1 -ImageToc` adds a TOC to `T3Bridge_Img` if
+>    the spike shows the client needs one.
+> 6. The clipboard is read with the Win32 clipboard API (formats: `PNG`, a copied image file, `CF_DIB`,
+>    `CF_DIBV5`) instead of WinForms `Clipboard.GetImage()`, so the helper needs no Windows Desktop runtime.
+> 7. The image viewer uses `BasicFrameTemplateWithInset` first (a portrait would cover the image's corner).
+>
 > **Revision 1.2 (Phase 2, 2026-11-11), backward compatible, wire version stays `1`:** D14 adds the
 > reasoning-effort picker (`focus.effort`, `focus.models[i].opts`, an optional 4th field on `model`)
 > and light markdown marks in user/assistant `p` segments. D15 changes thread selection to "every open
 > (unsettled) thread", raises the cap from 12 to 30 and drops the 30-minute tracker rule. Older addons
 > ignore the new fields, show at most their first 12 threads, and show `**`/`# ` marks literally.
 > Older companions ignore the 4th `model` field.
+
+Test data for rev 1.3: `clip_quiet_c2`, `shot_c2`, `unstage_c2`, `send_images_only_c2`, `hello_img_c2`
+(`protocol/vectors`) and `clip-quiet`, `shot`, `unstage`, `send-images-only`, `hello-img`
+(`companion/test/vectors`).
 
 This file is the contract between the **WoW addon** (`addon/T3Bridge`) and the **Windows
 companion** (`companion/`). If the code and this file disagree, this file wins. Change it
@@ -44,6 +74,9 @@ The brief's formats are kept. Everything below is an addition or a clarification
 | D13 | Addon: while the chat window shows thread X and a fresh snapshot has no `focus` for X (companion restarted, or the first `focus` was lost), the addon sends `focus X` again, at most once every 10 s. (Phase 1) | Otherwise an open chat stayed on "Loading thread..." after a companion restart. |
 | D14 | **Reasoning effort** (Phase 2). `focus.effort` = the effort the focused thread runs with (T3 option `effort`, resolved like T3 does: the stored value if the model offers it, legacy `ultracode` as `xhigh`, else the model's default). `focus.models[i].opts = {{id="effort", vals={...}, def="..."}}` lists the model's effort ids in menu order and its default; models without an effort option have no `opts`. Outbound `model <tid> <modelId> [effort]`: with the 4th field the companion sets model and effort in one T3 `thread.model-selection.set`, keeping every other option (`fastMode`, `ultracode`, `contextWindow`, ...). Without it, the stored effort is kept, or replaced by the new model's default if the new model does not offer it. An effort the model does not offer becomes its default. `ultrathink` is a real stored value in T3 0.1.8 (T3 sends the model's default API effort and prefixes each prompt with "Ultrathink:"). **Markdown marks:** user (`u`) and assistant (`a`) `p` segments keep `**bold**` (`__x__` becomes `**x**`) and headings as a line `# text` (any level); inline `` `code` `` and `- ` / `1. ` list items were already kept. The addon styles them; tool/system text is unchanged. | The user asked for an effort picker next to the model picker; one command means one matrix flash for "switch model + fall back effort". |
 | D15 | **Open threads** (Phase 2). `threads` = every open thread, at most **30** (was 12): not settled in T3 (`settledAt` null; T3's `thread.settle` / `thread.auto-settle` set it, `thread.unsettle` clears it), not archived or deleted, not a subagent. Order: needs you, running, then the rest by most recent update. The focused thread is always included, even when settled. The addon lists every thread in the tracker until it is settled. No 30-minute rule, and opening a row never hides it. Rows can be collapsed per thread (addon-only state, stored as thread ids in SavedVariables). | The user wants all open threads visible and to dismiss them only by settling them in T3. |
+| D16 | **Image slots and inline images** (rev 1.3). The installer creates `Interface\AddOns\T3Bridge_Img\i0001.tga … iNNNN.tga` (default 100, `-ImageSlots`), each a 512×512, 32-bit uncompressed TGA with alpha, bottom-left origin, exactly 1,048,594 bytes, fully transparent. The companion writes an image (fitted into 512×512, never upscaled) into the **top-left** of a free slot, in place, before any snapshot names it; the addon shows it with `SetTexCoord(0, w/512, 0, h/512)`. WoW caches a texture on first load, so **a slot shows one image per WoW session**: the companion burns slots per WoW process (pid + start time, `%LOCALAPPDATA%\T3Bridge\imgslots.json`); a new WoW process frees all (optionally also a new addon session, config `images.resetOnReload`, only if `/t3 spike img` shows that `/reload` frees textures). Message segment `{"img","[image: <alt>]",s=<slot or 0>,w=,h=,alt=,aid=,st=}`; top-level `imgslots={left=,total=,reset="restart"\|"reload"}`. On a clean stop (and `--clear`) every used slot is overwritten with the transparent placeholder. | Pictures in chat; the only way to get pixels into the client without creating files after start-up. |
+| D17 | **Staged attachments** (rev 1.3). Outbound `clip <tid> <quiet>` stages the Windows clipboard image (quiet `1` = Ctrl+V: say nothing if there is none), `shot <tid>` stages the newest file in `<WoW>\Screenshots` (jpg/tga/png) if it is under 15 minutes old, `unstage <tid> <aid>` removes one. `focus.staged = {{aid=, s=, w=, h=, name=}, …}` (at most 4). `send` uploads every staged image of that thread to T3 and attaches it to the message, then clears the list; with staged images the text may be empty. `hello` may carry a 5th field: `1` images work / `0` the user marked image slots as broken (`/t3 spike img fail`): the companion then writes no slots (`st="off"`). | Attaching screenshots and clipboard images from the game. |
+| D18 | **Notices** (rev 1.3). `focus.notice` = short feedback for the focused thread ("No image on the clipboard"), `focus.nid` = its counter. The companion keeps it for about 6 s; the addon shows it once per `nid` in the status bar for 4 s. | Feedback for commands that succeed without doing anything. |
 
 ---
 
@@ -135,6 +168,7 @@ T3B_IN_END=4812
 | `err` | table/nil | no | `{seq=<addon seq>, text="<short human message>"}` for the most recent failed command from `asid`. Stays until a later command succeeds or fails. |
 | `threads` | array | yes | ≤ 30 thread summaries of the user's open (unsettled) threads (D15), ordered: needs you (approval/input), running, then most recently updated. Never settled, archived, deleted or subagent threads, except that the focused thread is always included. Summaries only: message text appears only under `focus`, for the focused thread. |
 | `focus` | table/nil | no | Detail for the thread named by the last `focus` command, or `nil`. |
+| `imgslots` | table/nil | no | rev 1.3 (D16): `{left=<free slots>, total=<installed slots>, reset="restart"\|"reload"}`. `total=0`: no image slots (images show as text). The addon shows "Images: N left" when fewer than 20 are left. |
 
 #### Thread summary
 
@@ -165,6 +199,8 @@ setting) are compact and sorted after the expanded ones. They expand again when 
 | `streaming` | bool | The assistant is producing output right now. |
 | `pending` | table/nil | `{kind="approval"\|"input", rid=, text=, options={{id=,label=},...}}`. `options` may be empty for `input`. |
 | `older` | bool/nil | Optional (D11). `true` = older messages exist before `msgs[1]` (send `hist` to get them); `false` = `msgs[1]` is the thread's oldest shown message. Absent: the addon guesses from `msgs[1].i > 1`. |
+| `staged` | array/nil | rev 1.3 (D17): images attached to the next `send` for this thread, at most 4: `{aid="k1", s=<slot or 0>, w=, h=, name="clip-1.png"}`. |
+| `notice` / `nid` | string/int, nil | rev 1.3 (D18): short feedback and its counter. |
 | `msgs` | array | Oldest first, ≤ 120. |
 
 #### Message
@@ -174,7 +210,7 @@ setting) are compact and sorted after the expanded ones. They expand again when 
 | `i` | int | Message index in the thread, starting at 1. Never reused. A message whose body changes (streaming) keeps its `i`. |
 | `r` | string | Role: `u` user, `a` assistant, `t` tool, `s` system. |
 | `ts` | int | Creation time. |
-| `segs` | array | Ordered segments `{kind, text}`. `kind` `"p"` = text paragraph(s), `"c"` = code block (the text carries no backtick fences). Unknown kinds render as `"p"`. In `u`/`a` messages, `p` text may carry the D14 marks: `**bold**`, `` `code` ``, `# heading` lines, `- ` / `1. ` list items (2 spaces per nesting level). |
+| `segs` | array | Ordered segments `{kind, text}`. `kind` `"p"` = text paragraph(s), `"c"` = code block (the text carries no backtick fences). Unknown kinds render as `"p"`. In `u`/`a` messages, `p` text may carry the D14 marks: `**bold**`, `` `code` ``, `# heading` lines, `- ` / `1. ` list items (2 spaces per nesting level). Rev 1.3 (D16): `{"img","[image: <alt>]",s=,w=,h=,alt=,aid=,st=}` = an image (`s` slot 1..N, `w`/`h` its size in the slot ≤ 512; `s=0` with `st` = `load` (being prepared), `full` (no slots left), `off` (images unavailable), `err` (could not load), `old` (outside the newest 40 messages)). A message may consist of image segments only. |
 | `more` | bool | `true` = the companion cut this message to the size limit. The addon shows "(truncated — full text in T3 Code)". |
 
 ### 2.3 Writing rules (companion)
@@ -247,14 +283,17 @@ UTF-8. Fields are separated by a single TAB (`0x09`). No trailing newline. The *
 
 | Command | Fields | Meaning |
 |---------|--------|---------|
-| `hello` | `[proto] [addonVersion] [cell] [rows]` | Sent once per addon session, at the first fresh snapshot whose `asid` is not ours. |
+| `hello` | `[proto] [addonVersion] [cell] [rows] [img]` | Sent once per addon session, at the first fresh snapshot whose `asid` is not ours. `img` (rev 1.3): `1`/`0` image slots work / were marked broken. |
 | `focus` | `<tid>` | Make `tid` the focused thread (§2.6). |
-| `send` | `<tid> <clientMsgId> <text>` | Send a user message. `clientMsgId` = `<asid>-<seq>`, the idempotency key. |
+| `send` | `<tid> <clientMsgId> <text>` | Send a user message. `clientMsgId` = `<asid>-<seq>`, the idempotency key. Rev 1.3: the staged images of `tid` go with it, and `text` may then be empty. |
 | `model` | `<tid> <modelId> [effort]` | Change the thread's model; the optional 3rd argument also sets its reasoning effort (D14). The effort-only picker sends the current model id with the new effort. |
 | `intr` | `<tid>` | Stop or interrupt the running turn. |
 | `ans` | `<tid> <rid> <optionId\|text>` | Answer a pending request. If the field exactly equals one of the pending request's option ids, it is that option. Otherwise it is free text. |
 | `hist` | `<tid> <beforeIndex>` | Ask for older messages. |
 | `open` | `[tid]` | Bring the T3 Code app to the front. **Reserved; the addon never sends it** (the user's choice). |
+| `clip` | `<tid> <quiet>` | rev 1.3 (D17): stage the clipboard image. `quiet` `1` (from Ctrl+V): no notice when the clipboard holds no image. |
+| `shot` | `<tid>` | rev 1.3: stage the newest WoW screenshot if it is under 15 minutes old. |
+| `unstage` | `<tid> <aid>` | rev 1.3: remove a staged image (`aid` = `[A-Za-z0-9_-]{1,16}`). |
 
 ### 3.2 Frame layout (bytes)
 

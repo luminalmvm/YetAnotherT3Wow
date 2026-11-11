@@ -178,7 +178,7 @@ and ignores the rest. See the [fixture](fixtures/thread-stream-items.sample.json
    → {"_tag":"Ping"}  ← {"_tag":"Pong"}
    ```
    Failures come back as `exit: {_tag:"Failure", cause:…}` with tagged errors (for example `OrchestrationV2DispatchCommandError`).
-4. Methods used: `server.getConfig`, `orchestration.subscribeShell`, `orchestration.subscribeThread`,
+4. Methods used: `server.getConfig`, `orchestration.subscribeShell`, `orchestration.subscribeThread`, `attachments.createUploadUrl`, `assets.createUrl` (§10),
    `orchestration.dispatchCommand`, and `orchestration.launchThread` (only for the throwaway-thread spike).
    Other methods in the bundle: `getThreadProjection`, `getTurnItem` (full output of omitted items), `searchThread(s)`,
    `getThreadFamily`, `forceStopThread`, `subscribeCommandOutput`, … (INFERRED).
@@ -289,3 +289,49 @@ workspaceStrategy:{type:"root"}, initialMessage:{messageId, text, attachments:[]
 - The shell (`omitOlderSettled=1`) still contains recently settled threads (with `settledAt` set); older ones are only counted in `olderSettled`.
 - Live (2026-11-11): 41 non-subagent, non-archived threads in the filtered shell, **14 with `settledAt == null`** (identical with the unfiltered shell: 355 / 14). `snoozedUntil`/`pinnedAt` were unused.
 - The bridge's "open thread" = `settledAt == null && archivedAt == null && deletedAt == null && not subagent` (PROTOCOL D15). Snoozed threads count as open.
+
+## 10. Images (2026-11-11, PROTOCOL rev 1.3)
+
+Verified live on two throwaway threads ("T3Bridge image test / image e2e (safe to delete)", Haiku 4.5,
+"No project"), created and deleted by scripts in my scratchpad; both were gone from the full shell afterwards.
+None of the user's threads were touched. Redacted shapes: [fixture](fixtures/image-attachments.json).
+
+### 10.1 Images in thread history (VERIFIED)
+- `user_message` turn items carry `attachments: [{type:"image", id, name, mimeType, sizeBytes}]` (empty array when
+  there are none). The same objects come through `subscribeThread` (snapshot and `turn-item.updated`) and through
+  `GET …/threads/:id/bounded` (`projection.visibleTurnItems[].item.attachments`).
+- After sending, the attachment id is final: `<threadId>-<uuid>` (the upload's `pending-<uuid>` id is replaced when
+  the server "claims" the upload for the thread).
+- Schema (bundle, INFERRED beyond the fields above): `ChatAttachment = ChatImageAttachment | ChatFileAttachment |
+  ChatUnknownAttachment`; image `mimeType` must match `^image/`, `sizeBytes` ≤ 10 MiB
+  (`PROVIDER_SEND_TURN_MAX_IMAGE_BYTES`); an optional `source` describes snapshots taken by T3's own snap tool.
+  Images inside tool output use another resource type (`tool-output-image {threadId, itemId, index}`); the bridge
+  does not show those (not verified).
+
+### 10.2 Fetching attachment bytes (VERIFIED)
+1. WS `assets.createUrl {resource: {_tag:"attachment", attachmentId}}` (scope `orchestration:read`) returns
+   `{relativeUrl:"/api/assets/<signed token>", expiresAt (+1 h), imageDimensions?:{width,height}}`. Optional resource
+   fields `fileName`, `mimeType`, `disposition:"inline"|"attachment"` made no difference to the bytes.
+2. `GET <origin><relativeUrl>`: 200, `content-type: image/png`, the original bytes (SHA-256 identical). The URL is
+  signed, so no `Authorization` header is needed. The companion still only ever talks to `127.0.0.1`.
+
+### 10.3 Uploading and sending an image (VERIFIED)
+1. WS `attachments.createUploadUrl {type:"image", name, mimeType, sizeBytes}` (scope `orchestration:operate`;
+   `mimeType` ∈ `image/png|jpeg|gif|webp`, `sizeBytes` 1..10 MiB) returns
+   `{attachmentId:"pending-<uuid>", relativeUrl:"/api/attachments/upload/<signed token>", expiresAt (+10 min)}`.
+2. `POST <origin><relativeUrl>` with exactly `sizeBytes` bytes (a different `Content-Length` is refused) returns
+   `204`. No bearer needed (signed URL).
+3. `message.dispatch` with `attachments:[{type:"image", id:"pending-…", name, mimeType, sizeBytes}]`. The model
+   received the image: Haiku answered "Red blue." for a red/blue test PNG, and described a second one correctly.
+   **`text: ""` with an image is accepted** (the bridge allows image-only messages).
+4. `attachments.delete {attachmentId}` removes an unsent pending upload (only `pending-…` ids; others are ignored).
+   Unclaimed uploads are swept by the server after a while (bundle: `sweepStalePendingAttachments`, INFERRED).
+
+### 10.4 How the bridge uses it
+- Inline images: `user_message` attachments of the focused thread's newest 40 messages are fetched (10.2), decoded,
+  fitted to 512×512 and written into an image slot texture (PROTOCOL D16). At most 8 new images per snapshot.
+- Sending: images staged in game (`clip` / `shot`) are uploaded (10.3) when the user sends; formats T3 does not
+  accept (TGA, BMP) or files over 10 MiB are converted first (TGA → PNG, others → JPEG).
+- The T3 Code MCP tools `t3_attachment_prepare_upload` / `t3_thread_send_attachments` are the same flow behind
+  T3's own MCP server (bundle: "POST the file's exact bytes to `relativeUrl` … then send with the returned
+  `attachmentId`"); the bridge uses the WebSocket methods directly.

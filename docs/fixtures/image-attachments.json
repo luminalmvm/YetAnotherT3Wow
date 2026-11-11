@@ -1,0 +1,36 @@
+{
+  "_comment": "Image attachments, T3 Code 0.1.8 (orchestration protocol 2). Redacted capture from a throwaway thread created and deleted by the spike (2026-11-11): ids replaced by fakes, signed tokens replaced by <signed token>. See docs/t3-api-notes.md section 10.",
+  "createUploadUrl": {
+    "request": { "_tag": "Request", "id": "7", "tag": "attachments.createUploadUrl", "payload": { "type": "image", "name": "spike-red-blue.png", "mimeType": "image/png", "sizeBytes": 129 }, "headers": [] },
+    "response": { "attachmentId": "pending-fa4e0031-0000-4000-8000-000000000031", "relativeUrl": "/api/attachments/upload/<signed token>", "expiresAt": "<now + 600000 ms>" }
+  },
+  "upload": {
+    "request": "POST /api/attachments/upload/<signed token>  (body: the exact 129 bytes, Content-Length must equal sizeBytes; no Authorization header needed)",
+    "response": "204 No Content"
+  },
+  "dispatch": {
+    "type": "message.dispatch",
+    "commandId": "t3bridge:fa4e0032-0000-4000-8000-000000000032:0badf00d-3",
+    "threadId": "fa4e0032-0000-4000-8000-000000000032",
+    "messageId": "t3bridge:fa4e0032-0000-4000-8000-000000000032:0badf00d-3",
+    "text": "What two colours are in this image? Answer in two words.",
+    "attachments": [{ "type": "image", "id": "pending-fa4e0031-0000-4000-8000-000000000031", "name": "spike-red-blue.png", "mimeType": "image/png", "sizeBytes": 129 }],
+    "createdBy": "user",
+    "creationSource": "web",
+    "dispatchMode": { "type": "queue_after_active" }
+  },
+  "userMessageItem": {
+    "type": "user_message",
+    "text": "What two colours are in this image? Answer in two words.",
+    "inputIntent": "<as sent>",
+    "attachments": [{ "type": "image", "id": "fa4e0032-0000-4000-8000-000000000032-fa4e0033-0000-4000-8000-000000000033", "name": "spike-red-blue.png", "mimeType": "image/png", "sizeBytes": 129 }],
+    "_otherKeys": ["id", "threadId", "runId", "nodeId", "providerThreadId", "providerTurnId", "nativeItemRef", "parentItemId", "ordinal", "status", "title", "startedAt", "completedAt", "updatedAt", "createdBy", "creationSource", "messageId"]
+  },
+  "assistantReply": "Red blue.",
+  "assetsCreateUrl": {
+    "request": { "_tag": "Request", "id": "9", "tag": "assets.createUrl", "payload": { "resource": { "_tag": "attachment", "attachmentId": "fa4e0032-0000-4000-8000-000000000032-fa4e0033-0000-4000-8000-000000000033" } }, "headers": [] },
+    "response": { "relativeUrl": "/api/assets/<signed token>", "expiresAt": "<now + 3600000 ms>", "imageDimensions": { "width": 64, "height": 32 } }
+  },
+  "assetGet": "GET /api/assets/<signed token> -> 200, content-type image/png, the uploaded bytes (SHA-256 identical); no Authorization header needed",
+  "attachmentsDelete": { "request": { "attachmentId": "pending-fa4e0034-0000-4000-8000-000000000034" }, "response": "void (only pending uploads are deleted)" }
+}
